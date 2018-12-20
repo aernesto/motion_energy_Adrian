@@ -34,15 +34,31 @@ def custom_ME(stateMatrix, displayMatrices=False):
 def map_time_to_frame(t, binSize):
     return int(np.floor(t/binSize))
 
-def make_frame(t, ax1, ax2, stateMatrix, T, N, ME, fig):
+def map_frame_number_to_time_idx(frameNumber, T):
+    return np.mod(frameNumber,T+1)
+
+''' --- uncomment this function once debugged
+def make_frame(t, stateMatrix, ME, binSize, fig, ax1, ax2):
+
+    # define quantities used later on
+    _, N = stateMatrix.shape  # N is number of cells
+    x = np.arange(N)+1        # 1D space
+    T = _ - 1                 # T is time horizon (T = number of time steps - 1)
+
+    frameNumber = map_time_to_frame(t, binSize)    
+    time_idx = map_frame_number_to_time_idx(frameNumber, T)
+    
+    # plot particles
     ax1.clear()
-    tt = map_time_to_frame(t)
-    xx=x[stateMatrix[np.mod(tt,T+1),:]==1]
+
+    xx=x[stateMatrix[time_idx,:]==1]
     ax1.plot(xx, 0, 'bo')
     ax1.set_ylim(-.5, 0.5)
     ax1.set_xlim(0, N+1)
     
     #ax2.clear()
-    ax2.plot(tt,ME[tt],'bo')
+    if time_idx > 0:  # account for the fact that ME doesn't exist at time = 0
+        ax2.plot(frameNumber,ME[time_idx - 1],'bo')
 
     return mplfig_to_npimage(fig)
+'''
