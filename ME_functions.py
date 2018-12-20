@@ -37,7 +37,7 @@ def map_time_to_frame(t, binSize):
 def map_frame_number_to_time_idx(frameNumber, T):
     return np.mod(frameNumber,T+1)
 
-''' --- uncomment this function once debugged
+''' --- I didn't manage to put this function here instead of in the notebook :(
 def make_frame(t, stateMatrix, ME, binSize, fig, ax1, ax2):
 
     # define quantities used later on
