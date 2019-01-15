@@ -1,0 +1,33 @@
+[
+	{
+		"name": "motion_energy_Adrian",
+		"type": "git",
+		"update": "",
+		"url": "https://github.com/aernesto/motion_energy_Adrian.git"
+	}
+	{
+		"name": "dotsStimExperiments",
+		"type": "git",
+		"update": "",
+		"url": "https://github.com/TheGoldLab/dotsStimExperiments.git",
+		"toolboxRoot": "#dotsStimExperiments"
+	},
+	{
+		"name": "lmc_forked",
+        	"flavor": "ee5f2ef",
+		"type": "git",
+		"url": "https://github.com/aernesto/Lab-Matlab-Control.git",
+		"toolboxRoot": "#lmc_forked_ee5f2ef" 
+	},
+	{
+		"name": "Lab-Matlab-Utilities",
+        	"flavor": "",
+		"type": "git",
+		"url": "https://github.com/TheGoldLab/Lab-Matlab-Utilities.git" 
+	},
+	{
+		"name": "mgl",
+		"type": "git",
+		"url": "https://github.com/justingardner/mgl.git"
+	}
+]
