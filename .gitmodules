@@ -1,0 +1,3 @@
+[submodule "Python/modules/dots_db"]
+	path = Python/modules/dots_db
+	url = https://github.com/TheGoldLab/dots_db.git
