@@ -1,29 +1,33 @@
 # import numpy as np
 # import matplotlib.pyplot as plt
+import re
 import pandas as pd
 import motionenergy as kiani_me
 import sys
-sys.path.insert(0, 'dots_db/dotsDB/')
-import dotsDB as ddb
+# sys.path.insert(0, 'dots_db/dotsDB/')
+import dots_db.dotsDB as dDB
 
 
 def map_snow_dots_params_to_kiani_dots(param_dict):
-    new_dict = {}
-    new_dict['radius'] = param_dict['diameter'] / 2
-    new_dict['density'] = param_dict['density']
-    new_dict['size'] = param_dict['pixelSize']
-    new_dict['speed'] = param_dict['speed']
-    new_dict['coherence'] = param_dict['coherence'] / 100
-    new_dict['ppd'] = param_dict['pixelsPerDegree']
-    new_dict['framerate'] = 1 / param_dict['windowFrameRate']
-    new_dict['duration'] = param_dict['viewingDuration']
-    new_dict['moments'] = None # irrelevant for now
-    new_dict['seed'] = param_dict['randSeedBase']
+    new_dict = {
+        'radius': param_dict['diameter'] / 2,
+        'density': param_dict['density'],
+        'size': param_dict['pixelSize'],
+        'speed': param_dict['speed'],
+        'coherence': param_dict['coherence'] / 100,
+        'ppd': param_dict['pixelsPerDegree'],
+        'framerate': 1 / param_dict['windowFrameRate'],
+        'duration': param_dict['viewingDuration'],
+        'moments': None, # irrelevant for now
+        'seed': param_dict['randSeedBase'],
+                }
     return new_dict
 
 
 def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_list, filters, append_to=None):
     """
+    Computes the motion energy (ME) for trials of the dots stimulus. An ME value is obtained for each trial and each
+    timestep. Results are returned as pandas.DataFrame.
 
     :param db_file: full path to hdf5 file created with the dotsDB module
     :param dset_name: name of dataset inside hdf5 file (full path)
@@ -35,10 +39,10 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
         dsetID; filtersID; trial; time; ME; direction; coherence; density
         If append_to is not None, the inputted data frame is edited in place?
     """
-    db_info = ddb.inspect_db(db_file)
+    db_info = dDB.inspect_db(db_file)
     attrs_dict = dict(db_info[gp_name]['attrs'])
 
-    trials = [ddb.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
+    trials = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
     dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in trials]
 
     time_points = kiani_me.filter_grid(attrs_dict['num_frames'], 1 / attrs_dict['frame_rate'])
@@ -71,10 +75,37 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
 
 
 def create_dset_id(db_file, dset_name):
-    """todo: to write"""
-    return ''
+    """
+    produce a shorter string from the dataset name in the hdf5 file, with info about file name, coherence and direction
+    of stimulus
+
+    :param db_file: (str) full path to hdf5 file
+    :param dset_name: (str) dataset name (starting from root in hdf5 file)
+    :return (str): short string encoding info about the dataset
+    """
+    extension_length = 3
+    extension = db_file[-extension_length:]
+    assert extension == '.h5'
+    db_name = db_file[:-extension_length]
+
+    direction = 'left' if 'dleft' in dset_name else 'right'
+
+    coh_pattern = r"_c[0-9]+_"
+    coh_match = re.search(coh_pattern, dset_name)
+    if coh_match:
+        coherence = coh_match.group(0)[2:][:-1]  # this trims the first 2 chars '_c' and the last one '_'
+    else:
+        raise ValueError('no coherence was found in dset_name')
+
+    return db_name + direction + coherence
 
 
 def create_filters_id(filters):
-    """todo: to write"""
-    return ''
+    """create string to encode filters characteristics. This uses the named tuple structure kiani_me.FilterSet"""
+    filters_id = ''
+    for entry in filters:
+        for s in entry.shape:
+            filters_id += str(s)
+            filters_id += '_'
+    filters_id = filters_id[:-1]  # remove last '_'
+    return filters_id
