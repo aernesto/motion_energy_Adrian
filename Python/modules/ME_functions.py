@@ -5,7 +5,7 @@ import pandas as pd
 import motionenergy as kiani_me
 import sys
 # sys.path.insert(0, 'dots_db/dotsDB/')
-import dots_db.dotsDB as dDB
+import dots_db.dotsDB.dotsDB as dDB
 
 
 def map_snow_dots_params_to_kiani_dots(param_dict):
