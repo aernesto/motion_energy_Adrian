@@ -24,7 +24,8 @@ def map_snow_dots_params_to_kiani_dots(param_dict):
     return new_dict
 
 
-def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_list, filters, append_to=None):
+def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_list, filters, append_to=None,
+                                           create_dsetid=True):
     """
     Computes the motion energy (ME) for trials of the dots stimulus. An ME value is obtained for each trial and each
     timestep. Results are returned as pandas.DataFrame.
@@ -35,6 +36,8 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     :param trial_list: list of positive integers indicating the trials to extract
     :param filters: filters as outputted by motion_filters()
     :param append_to: pandas data frame. If None, a data frame is created, otherwise, rows are appended.
+    :param create_dsetid: (bool). if True, create_dset_id() is called to fill the dataframe field.
+        Otherwise use dset_name
     :return: a pandas data frame in long format with the following columns
         dsetID; filtersID; trial; time; ME; direction; coherence; density
         If append_to is not None, the inputted data frame is edited in place?
@@ -45,18 +48,21 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     trials = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
     dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in trials]
 
-    time_points = kiani_me.filter_grid(attrs_dict['num_frames'], 1 / attrs_dict['frame_rate'])
-    assert len(time_points) > 0
-    # the data frame to return has num_trials x num_time_points rows
-
     # list of dict that will become a data frame
     rows = []
 
-    dataset_id = create_dset_id(db_file, dset_name)
     filters_id = create_filters_id(filters)
+    if create_dsetid:
+        dataset_id = create_dset_id(db_file, dset_name)
+    else:
+        dataset_id = dset_name
 
     for trial in range(len(trial_list)):
         motion_energy = dots_energy[trial].sum(axis=(0, 1))
+
+        time_points = kiani_me.filter_grid(trials[trial].shape[2], 1 / attrs_dict['frame_rate'])
+        assert len(time_points) > 0
+
         for time_point in range(len(time_points)):
             row_as_dict = {
                 'dsetID': dataset_id,
