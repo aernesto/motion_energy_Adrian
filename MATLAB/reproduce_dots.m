@@ -57,7 +57,8 @@ end
 function [params, real_dur] = extract_dots_params(one_row)
     params = table2struct(one_row);
     real_dur = params.dotsOff - params.dotsOn;
-    params = rmfield(params, {'taskID', ...
+    params = rmfield(params, { ...
+        'taskID', ...
         'trialIndex', ...
         'trialStart', ...
         'trialEnd', ...
@@ -71,7 +72,6 @@ function [params, real_dur] = extract_dots_params(one_row)
         'fixationStart', ...
         'targetOn', ...
         'dotsOn', ...
-        'finalCPTime', ...
         'dotsOff', ...
         'choiceTime', ...
         'cpChoiceTime', ...
@@ -93,21 +93,39 @@ function [params, real_dur] = extract_dots_params(one_row)
     params.isVisible = 0;
 end
 
-function frame_3d_matrix = generate_frames(params_struct, debug_flag, time_max)
+function frame_3d_matrix = generate_frames(params_struct, debug_flag, ...
+    time_max)
+    reversal_time = params_struct.finalCPTime;
+    if isnan(reversal_time) || (reversal_time == 0)
+        reversal_time = inf;
+    end
+    
     if debug_flag
         dots = dotsDrawableDotKinetogramDebug(params_struct);
     else
         dots = dotsDrawableDotKinetogramDebug(params_struct);
     end
 
+    function dd = flip_direction(d)
+        if d == 180
+            dd = 0;
+        else
+            dd = 180;
+        end
+    end
+
     % loop through time/frame
     i = 0;
     curr_time = 0;  % stimulus onset  
     dots.prepare_to_virtually_draw(60);
+    has_switched = false;
     while curr_time < time_max
         i = i + 1;
-        
         % use curr_time to check for CP!
+        if (curr_time > reversal_time) && ~has_switched
+            dots.direction = flip_direction(dots.direction);
+            has_switched = true;
+        end
         dots.computeNextFrame();
         
         curr_time = curr_time + 1 / 60;
