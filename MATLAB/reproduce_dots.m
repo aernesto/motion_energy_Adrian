@@ -36,17 +36,19 @@ num_trials = size(trial_data);
 num_trials = num_trials(2);
 
 if debug_flag
-    num_trials = 1;
+    num_trials = 2;
 end
 
 %trial_data(1:5,:)
+frames = cell(1, num_trials);
 
 for trial_number = 1:num_trials
     row = trial_data(trial_number, :);
     [dots_params, max_time] = extract_dots_params(row);
     
     % loop over frames
-    frames = generate_frames(dots_params, debug_flag, max_time);
+    frames{trial_number} = generate_frames(dots_params, ...
+        debug_flag, max_time);
    
     % recycle old function that translates frames into a table --> .csv
 end
@@ -91,24 +93,24 @@ function [params, real_dur] = extract_dots_params(one_row)
     params.isVisible = 0;
 end
 
-function frame_cell = generate_frames(params_struct, debug_flag, time_max)
+function frame_3d_matrix = generate_frames(params_struct, debug_flag, time_max)
     if debug_flag
-        dots = dotsDrawableDotKinetogramDebug(params_struct)
+        dots = dotsDrawableDotKinetogramDebug(params_struct);
     else
         dots = dotsDrawableDotKinetogramDebug(params_struct);
     end
 
     % loop through time/frame
     i = 0;
-    curr_time = 0;  % stimulus onset
+    curr_time = 0;  % stimulus onset  
+    dots.prepare_to_virtually_draw(60);
     while curr_time < time_max
         i = i + 1;
-        dots.prepare_to_virtually_draw(60);
         
         % use curr_time to check for CP!
         dots.computeNextFrame();
         
         curr_time = curr_time + 1 / 60;
     end
-    frame_cell = dots.dotsPositions;
+    frame_3d_matrix = dots.dotsPositions;
 end
