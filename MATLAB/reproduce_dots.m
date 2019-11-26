@@ -29,6 +29,8 @@ DATA_FOLDER = ['/Users/adrian/oneCP/Fall_2019/raw/', ...
 FILE_NAME = ['completed4AFCtrials_task100_date_', ...
     session_timestamp, '.csv'];
 FIRA = [DATA_FOLDER, FILE_NAME];
+DOTS = [DATA_FOLDER, session_timestamp, '_dotsPositions.csv'];
+disp(DOTS)
 
 trial_data = readtable(FIRA);
 
@@ -41,20 +43,47 @@ end
 
 %trial_data(1:5,:)
 frames = cell(1, num_trials);
+dotsColNames = {...
+    'xpos', ...
+    'ypos', ...
+    'isActive', ...
+    'isCoherent', ...
+    'frameIdx', ...
+    'taskID'};
+
+fullMatrix = zeros(0,length(dotsColNames));
+end_block = 0;
 
 for trial_number = 1:num_trials
     row = trial_data(trial_number, :);
     [dots_params, max_time] = extract_dots_params(row);
     
     % loop over frames
-    frames{trial_number} = generate_frames(dots_params, ...
-        debug_flag, max_time);
-   
+    dotsPositions = generate_frames(dots_params, max_time);
+    frames{trial_number} = dotsPositions;
+    
     % recycle old function that translates frames into a table --> .csv
+    numDotsFrames = size(dotsPositions,3);
+    
+    for frame = 1:numDotsFrames
+        numDots = size(dotsPositions,2);
+        
+        start_block = end_block + 1;
+        end_block = start_block + numDots - 1;
+        
+        fullMatrix(start_block:end_block,:) = [...
+            squeeze(dotsPositions(:, :, frame)'),...
+            repmat([frame, 100], numDots, 1)];
+    end
 end
+
+U=array2table(fullMatrix, 'VariableNames', dotsColNames);
+writetable(U, DOTS, 'WriteRowNames',true)
+disp('dots written')
 end
 
 function [params, real_dur] = extract_dots_params(one_row)
+% get dots stimulus parameter from table's single row
     params = table2struct(one_row);
     real_dur = params.dotsOff - params.dotsOn;
     params = rmfield(params, { ...
@@ -93,18 +122,15 @@ function [params, real_dur] = extract_dots_params(one_row)
     params.isVisible = 0;
 end
 
-function frame_3d_matrix = generate_frames(params_struct, debug_flag, ...
+function frame_3d_matrix = generate_frames(params_struct, ...
     time_max)
+% get dotsPositions 3D matrix from dotsDrawableDotKinetogramDebug's trial
     reversal_time = params_struct.finalCPTime;
     if isnan(reversal_time) || (reversal_time == 0)
         reversal_time = inf;
     end
     
-    if debug_flag
-        dots = dotsDrawableDotKinetogramDebug(params_struct);
-    else
-        dots = dotsDrawableDotKinetogramDebug(params_struct);
-    end
+    dots = dotsDrawableDotKinetogramDebug(params_struct);
 
     function dd = flip_direction(d)
         if d == 180
