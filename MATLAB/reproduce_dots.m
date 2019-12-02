@@ -35,7 +35,7 @@ disp(DOTS)
 trial_data = readtable(FIRA);
 
 num_trials = size(trial_data); 
-num_trials = num_trials(2);
+num_trials = num_trials(1);
 
 if debug_flag
     num_trials = 2;
@@ -49,7 +49,8 @@ dotsColNames = {...
     'isActive', ...
     'isCoherent', ...
     'frameIdx', ...
-    'taskID'};
+    'taskID', ...
+    'trialIx'};
 
 fullMatrix = zeros(0,length(dotsColNames));
 end_block = 0;
@@ -73,7 +74,7 @@ for trial_number = 1:num_trials
         
         fullMatrix(start_block:end_block,:) = [...
             squeeze(dotsPositions(:, :, frame)'),...
-            repmat([frame, 100], numDots, 1)];
+            repmat([frame, 100, trial_number-1], numDots, 1)];
     end
 end
 
