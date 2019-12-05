@@ -30,12 +30,12 @@ def get_names(restr_vals, name_list):
     """
     my_round = (lambda x: str(round(float(x), 1)))
     maps = {
-        'subject': {i: 'subjS' + str(i) for i in [1, 2, 3, 4, 5]},
-        'pcp': {k: 'probCP' + my_round(k) for k in [0, 0.2, 0.5, 0.8]},
-        'coh': {0: 'coh0.0', 100: 'coh100.0', 'fcn': my_round},
+        'subject': {i: 'subj' + str(i) for i in [10, 11, 12, 13]},
+        'pcp': {k: 'probCP' + my_round(k) for k in [0.3, 0.7]},
+        'coh': {0: 'coh0', 100: 'coh100', 'fcn': my_round},
         'ans': {'l': 'ansleft', 'r': 'ansright'},
         'cp': {True: 'CPyes', False: 'CPno'},
-        'vd': {k: 'VD' + str(k) for k in [100, 200, 300, 400]},
+        'vd': {k: 'VD' + str(k) for k in [100, 200, 250, 300, 400, 600]},
         'dir': {k: '/' + k for k in ['left', 'right']}
     }
 
