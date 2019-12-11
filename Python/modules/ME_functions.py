@@ -1,5 +1,5 @@
 # import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import re
 import numpy as np
 import pandas as pd
@@ -7,6 +7,133 @@ import motionenergy as kiani_me
 import sys
 # sys.path.insert(0, 'dots_db/dotsDB/')
 import dots_db.dotsDB.dotsDB as dDB
+
+
+def plot_cyl(db_info, fixed_length, cylinders, object_names, path_to_file, cyl_number,
+             plot=True, return_series=False, w=16, h=5):
+    tuple_cyl, replot = cylinders[cyl_number]
+    cyl = build_cyl(tuple_cyl)
+    if plot and replot:
+        d = compute_me_diff(cyl, object_names, fixed_length, db_info, path_to_file)
+        plt.rcParams["figure.figsize"] = (w, h)  # (w, h) # figure size
+        plt.plot(d)
+        plt.ylabel('Delta ME (R-L)')
+        plt.xlabel('time (s)')
+        plt.title('cyl' + str(cyl_number) + print_cyl(cyl))
+        plt.show()
+        if return_series:
+            return d
+    else:
+        if return_series:
+            return compute_me_diff(cyl, object_names, fixed_length, db_info)
+        else:
+            print(f'nothing was done as plot={plot} and return_series={return_series}')
+
+
+def print_cyl(cyl):
+    base = ''
+    for k, v in cyl.items():
+        base += k + ':'
+        for vv in v:
+            base += str(vv) + '-'
+        base = base[:-1]  # delete trailing -
+        base += ' '
+    return base
+
+
+def build_cyl(cyl_tuple):
+    n = len(cyl_tuple)
+    keys = [cyl_tuple[i] for i in range(n) if not i % 2]  # even-index entries
+    values = [cyl_tuple[i] for i in range(n) if i % 2]  # odd-index entries
+    return dict([(keys[i], values[i]) for i in range(n // 2)])
+
+
+def get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path, side):
+    curr_cylinder = cylinder.copy()
+    curr_cylinder['ans'] = side[0]
+
+    group_names, dset_names = get_names(curr_cylinder, object_names)
+
+    return extract_list_arrays(group_names, dset_names, uniform_shape, file_path), group_names, curr_cylinder
+
+
+def compute_me_diff(cylinder, object_names, uniform_shape, database_info, file_path):
+    """
+    A cylinder looks like this:
+    cylinder = {'coh': [0], 'vd': [400], 'cp': [False]}
+    """
+    r_dots, r_group_names, r_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path,
+                                                               'right')
+    l_dots, l_group_names, l_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path, 'left')
+
+    # truncate to minimum number of frames (left time-alignment)
+    min_num_frames = min(min(r_k.shape[2], l_k.shape[2]) for r_k, l_k in zip(r_dots, l_dots))
+
+    r_dots = [d[:, :, :min_num_frames] for d in r_dots]
+    l_dots = [d[:, :, :min_num_frames] for d in l_dots]
+
+    r_agg_df = build_me_df(database_info, r_group_names, r_dots, r_cylinder)
+    l_agg_df = build_me_df(database_info, l_group_names, l_dots, l_cylinder)
+
+    righties = r_agg_df.groupby('time').mean()
+    lefties = l_agg_df.groupby('time').mean()
+
+    final = righties['ME'] - lefties['ME']
+    return final
+
+
+def artificial_decide(df, cp_time):
+    """
+    :param df: a pandas.DataFrame with two columns named 'ME' and 'time'. Time is in seconds. Should only contain data
+        about a single trial
+    :param cp_time: theoretical time of a potential CP in seconds.
+    :return: a tuple of strings representing the decisions about direction of motion in the last
+        epoch ('left' vs 'right') and presence or absence of a CP ('CP' vs 'noCP').
+    """
+    first_epoch_df = df[df['time'] <= cp_time]
+    first_epoch_me = first_epoch_df['ME'].mean()
+
+    second_epoch_df = df[df['time'] > cp_time]
+    second_epoch_me = second_epoch_df['ME'].mean()
+
+    cp_choice = 'CP' if first_epoch_me * second_epoch_me < 0 else 'noCP'
+    dir_choice = 'right' if second_epoch_me > 0 else 'left'
+
+    return dir_choice, cp_choice
+
+
+def compute_me(cylinder, object_names, uniform_shape, database_info, file_path):
+    """
+    A cylinder looks like this:
+    cylinder = {'coh': [0], 'vd': [400], 'cp': [False]}
+    """
+    r_dots, r_group_names, r_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path,
+                                                               'right')
+    l_dots, l_group_names, l_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path, 'left')
+
+    # truncate to minimum number of frames (left time-alignment)
+    min_num_frames = min(min(r_k.shape[2], l_k.shape[2]) for r_k, l_k in zip(r_dots, l_dots))
+
+    r_dots = [d[:, :, :min_num_frames] for d in r_dots]
+    l_dots = [d[:, :, :min_num_frames] for d in l_dots]
+
+    all_dots = r_dots + l_dots
+
+    agg_df = build_me_df(database_info, r_group_names, all_dots, cylinder)  # group names passed do not matter
+
+    # compute artificial decision
+    # todo: finish off this function
+    raise NotImplementedError
+    agg_df.groupby('trial').apply(artificial_decide, 0.2)
+
+    r_agg_df = build_me_df(database_info, r_group_names, r_dots, r_cylinder)
+    l_agg_df = build_me_df(database_info, l_group_names, l_dots, l_cylinder)
+
+    righties = r_agg_df.groupby('time').mean()
+    lefties = l_agg_df.groupby('time').mean()
+
+    final = righties['ME'] - lefties['ME']
+    return final
 
 
 def get_object_names_in_db(file_path):
@@ -71,7 +198,8 @@ def extract_list_arrays(group_names, dset_names, uniform_shape, file_path):
     :param group_names: list of groups
     :param dset_names: list of datasets
     :param uniform_shape: shape of all datasets in DB
-    :return:
+    :param file_path: full local path to .h5 file
+    :return: list of numpy arrays
     """
     dots = []
     for (gs, ds) in zip(group_names, dset_names):
@@ -117,7 +245,7 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
         Otherwise use dset_name
     :return: a pandas data frame in long format with the following columns
         dsetID; filtersID; trial; time; ME; direction; coherence; density
-        If append_to is not None, the inputted data frame is edited in place?
+        If append_to is not None, data is appended to the append_to data frame (returns a copy)
     """
     db_info = dDB.inspect_db(db_file)
     attrs_dict = dict(db_info[gp_name]['attrs'])
@@ -155,6 +283,8 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
 
     if append_to is None:
         return pd.DataFrame(rows)
+    else:
+        return pd.concat([append_to, pd.DataFrame(rows)], ignore_index=True)
 
 
 def create_dset_id(db_file, dset_name):
