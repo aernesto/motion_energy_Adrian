@@ -10,12 +10,15 @@ import dots_db.dotsDB.dotsDB as dDB
 
 
 def plot_cyl(db_info, fixed_length, cylinders, object_names, path_to_file, cyl_number,
-             plot=True, return_series=False, w=16, h=5):
+             plot=True, return_series=False, w=16, h=5, real=True):
     tuple_cyl, replot = cylinders[cyl_number]
     cyl = build_cyl(tuple_cyl)
     if plot and replot:
-        d = compute_me_diff(cyl, object_names, fixed_length, db_info, path_to_file)
         plt.rcParams["figure.figsize"] = (w, h)  # (w, h) # figure size
+        if real:
+            d = compute_me_diff(cyl, object_names, fixed_length, db_info, path_to_file)
+        else:
+            d = compute_artificial_dm_kernels(cyl, object_names, fixed_length, db_info, path_to_file)
         plt.plot(d)
         plt.ylabel('Delta ME (R-L)')
         plt.xlabel('time (s)')
@@ -25,7 +28,10 @@ def plot_cyl(db_info, fixed_length, cylinders, object_names, path_to_file, cyl_n
             return d
     else:
         if return_series:
-            return compute_me_diff(cyl, object_names, fixed_length, db_info)
+            if real:
+                return compute_me_diff(cyl, object_names, fixed_length, db_info)
+            else:
+                return compute_artificial_dm_kernels(cyl, object_names, fixed_length, db_info, path_to_file)
         else:
             print(f'nothing was done as plot={plot} and return_series={return_series}')
 
@@ -84,6 +90,7 @@ def compute_me_diff(cylinder, object_names, uniform_shape, database_info, file_p
 
 def artificial_decide(df, cp_time):
     """
+    this function is meant to be used within a pandas.core.GroupBy.apply() call
     :param df: a pandas.DataFrame with two columns named 'ME' and 'time'. Time is in seconds. Should only contain data
         about a single trial
     :param cp_time: theoretical time of a potential CP in seconds.
@@ -93,16 +100,20 @@ def artificial_decide(df, cp_time):
     first_epoch_df = df[df['time'] <= cp_time]
     first_epoch_me = first_epoch_df['ME'].mean()
 
-    second_epoch_df = df[df['time'] > cp_time]
-    second_epoch_me = second_epoch_df['ME'].mean()
+    if df['time'].max() > cp_time:
+        second_epoch_df = df[df['time'] > cp_time]
+        second_epoch_me = second_epoch_df['ME'].mean()
+        # Add two choice columns
+        df['cp_choice'] = 'CP' if first_epoch_me * second_epoch_me < 0 else 'noCP'
+        df['dir_choice'] = 'right' if second_epoch_me > 0 else 'left'
+    else:
+        df['cp_choice'] = 'noCP'  # perfect knowledge of time assumed
+        df['dir_choice'] = 'right' if first_epoch_me > 0 else 'left'
 
-    cp_choice = 'CP' if first_epoch_me * second_epoch_me < 0 else 'noCP'
-    dir_choice = 'right' if second_epoch_me > 0 else 'left'
-
-    return dir_choice, cp_choice
+    return df
 
 
-def compute_me(cylinder, object_names, uniform_shape, database_info, file_path):
+def compute_artificial_dm_kernels(cylinder, object_names, uniform_shape, database_info, file_path):
     """
     A cylinder looks like this:
     cylinder = {'coh': [0], 'vd': [400], 'cp': [False]}
@@ -122,16 +133,12 @@ def compute_me(cylinder, object_names, uniform_shape, database_info, file_path):
     agg_df = build_me_df(database_info, r_group_names, all_dots, cylinder)  # group names passed do not matter
 
     # compute artificial decision
-    # todo: finish off this function
-    raise NotImplementedError
-    agg_df.groupby('trial').apply(artificial_decide, 0.2)
+    agg_df = agg_df.groupby('trial').apply(artificial_decide, 0.2)
 
-    r_agg_df = build_me_df(database_info, r_group_names, r_dots, r_cylinder)
-    l_agg_df = build_me_df(database_info, l_group_names, l_dots, l_cylinder)
+    righties = agg_df[agg_df['dir_choice'] == 'right'].groupby('time').mean()
+    lefties = agg_df[agg_df['dir_choice'] == 'left'].groupby('time').mean()
 
-    righties = r_agg_df.groupby('time').mean()
-    lefties = l_agg_df.groupby('time').mean()
-
+    # final might well contain only NaN values, if 0 trials with a particular choice appear
     final = righties['ME'] - lefties['ME']
     return final
 
@@ -157,7 +164,7 @@ def get_names(restr_vals, name_list):
     """
     my_round = (lambda x: str(round(float(x), 1)))
     maps = {
-        'subject': {i: 'subj' + str(i) for i in [10, 11, 12, 13]},
+        'subject': {i: 'subj' + str(i) for i in range(10, 10+50)},
         'pcp': {k: 'probCP' + my_round(k) for k in [0.3, 0.7]},
         'coh': {0: 'coh0', 100: 'coh100', 'fcn': my_round},
         'ans': {'l': 'ansleft', 'r': 'ansright'},

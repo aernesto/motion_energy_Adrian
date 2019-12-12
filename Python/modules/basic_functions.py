@@ -1,6 +1,8 @@
 import h5py
 import pandas as pd
 import numpy as np
+import os
+import dots_db.dotsDB.dotsDB as ddb
 
 
 def label_dots(timestamps, global_labeled_dots_filename, data_folder):
@@ -51,6 +53,7 @@ def label_dots(timestamps, global_labeled_dots_filename, data_folder):
             full_labeled_dots.to_csv(global_labeled_dots_filename, index=False, mode='a+', header=True)
             
     return None
+
 
 def inspect_csv(df):
     """df is a pandas.DataFrame"""
@@ -105,7 +108,6 @@ def add_trial_params(row, t, trials):
     return row
 
 
-
 def set_nans(df):
     if 'isActive' in df:
         del df['isActive']
@@ -131,7 +133,6 @@ def get_frames(df):
         frame_data = df[df["frameIdx"] == (fr+1)]
         list_of_frames.append(np.array(frame_data[['ypos','xpos']]))  # here I swap xpos with ypos for dotsDB
     return list_of_frames
-
 
 
 def get_group_name(df):
@@ -195,7 +196,6 @@ def get_group_name(df):
             'cpTime': cpt}
 
     return group_name, vals
-
 
 
 def write_dots_to_file(df, hdf5_file):
@@ -269,7 +269,7 @@ def count_duplicates(dataset):
     return seen, dupes
 
 
-def count_meta(name, obj):
+def count_meta(name, obj, dsets):
     if isinstance(obj, h5py.Dataset):
         print(name)
         dsets[name] = count_duplicates(obj)
