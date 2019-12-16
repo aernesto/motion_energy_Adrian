@@ -97,7 +97,7 @@ def add_trial_params(row, t, trials):
     except AssertionError:
         print(f'0.5 sec margin failed at row {row.name}')
         return row
-    c,v,p,i,s,b,P = get_trial_params(trial)
+    c, v, p, i, s, b, P = get_trial_params(trial)
     row['coherence'] = c
     row['viewingDuration'] = v
     row['presenceCP'] = p
@@ -267,13 +267,6 @@ def count_duplicates(dataset):
                 dupes.append(x)
             seen[x] += 1
     return seen, dupes
-
-
-def count_meta(name, obj, dsets):
-    if isinstance(obj, h5py.Dataset):
-        print(name)
-        dsets[name] = count_duplicates(obj)
-    return None
 
 
 def extract_keys(name):
