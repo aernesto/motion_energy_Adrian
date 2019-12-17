@@ -10,22 +10,32 @@ import dots_db.dotsDB.dotsDB as dDB
 
 
 def plot_cyl(db_info, fixed_length, cylinders, object_names, path_to_file, cyl_number,
-             plot=True, return_series=False, w=16, h=5, real=True):
+             plot=True, return_series=False, w=16, h=10, real=True):
     tuple_cyl, replot = cylinders[cyl_number]
     cyl = build_cyl(tuple_cyl)
     if plot and replot:
         plt.rcParams["figure.figsize"] = (w, h)  # (w, h) # figure size
         if real:
-            d = compute_me_diff(cyl, object_names, fixed_length, db_info, path_to_file)
+            d_left, d_right, counts = compute_me_diff(cyl, object_names, fixed_length, db_info, path_to_file)
         else:
-            d = compute_artificial_dm_kernels(cyl, object_names, fixed_length, db_info, path_to_file)
-        plt.plot(d)
+            d_left, d_right, counts_la, counts_ra = compute_artificial_dm_kernels(cyl, object_names, fixed_length,
+                                                                                  db_info, path_to_file)
+            counts = {
+                'left_answer_trials': (counts_la['left_answer_trials'], counts_ra['left_answer_trials']),
+                'right_answer_trials': (counts_la['right_answer_trials'], counts_ra['right_answer_trials'])
+            }
+
+        # todo: plot left and right-aligned kernels
+        plt.plot(d_left, color='b')
+        plt.plot(d_right, color='r')
+        plt.legend(['left aligned', 'right aligned'])
         plt.ylabel('Delta ME (R-L)')
         plt.xlabel('time (s)')
         plt.title('cyl' + str(cyl_number) + print_cyl(cyl))
+        plt.suptitle(str(counts))
         plt.show()
         if return_series:
-            return d
+            return d_left, d_right
     else:
         if return_series:
             if real:
@@ -67,25 +77,38 @@ def compute_me_diff(cylinder, object_names, uniform_shape, database_info, file_p
     """
     A cylinder looks like this:
     cylinder = {'coh': [0], 'vd': [400], 'cp': [False]}
+    :returns: tuple with 3 elements. First 2 are left and right-aligned dataframes of delta ME. Third is dict of counts.
+    todo: check time values in returned dataframe
     """
     r_dots, r_group_names, r_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path,
                                                                'right')
     l_dots, l_group_names, l_cylinder = get_dots_from_cylinder(cylinder, object_names, uniform_shape, file_path, 'left')
 
-    # truncate to minimum number of frames (left time-alignment)
+    counts = {
+        'left_answer_trials': len(l_dots),
+        'right_answer_trials': len(r_dots)
+    }
+
+    # truncate to minimum number of frames (for left and right time-alignment)
     min_num_frames = min(min(r_k.shape[2], l_k.shape[2]) for r_k, l_k in zip(r_dots, l_dots))
 
-    r_dots = [d[:, :, :min_num_frames] for d in r_dots]
-    l_dots = [d[:, :, :min_num_frames] for d in l_dots]
+    r_dots_left_aligned = [d[:, :, :min_num_frames] for d in r_dots]
+    l_dots_left_aligned = [d[:, :, :min_num_frames] for d in l_dots]
+    r_agg_df_left_aligned = build_me_df(database_info, r_group_names, r_dots_left_aligned, r_cylinder)
+    l_agg_df_left_aligned = build_me_df(database_info, l_group_names, l_dots_left_aligned, l_cylinder)
+    righties_la = r_agg_df_left_aligned.groupby('time').mean()
+    lefties_la = l_agg_df_left_aligned.groupby('time').mean()
+    final_left_aligned = righties_la['ME'] - lefties_la['ME']
 
-    r_agg_df = build_me_df(database_info, r_group_names, r_dots, r_cylinder)
-    l_agg_df = build_me_df(database_info, l_group_names, l_dots, l_cylinder)
+    r_dots_right_aligned = [d[:, :, -min_num_frames:] for d in r_dots]
+    l_dots_right_aligned = [d[:, :, -min_num_frames:] for d in l_dots]
+    r_agg_df_right_aligned = build_me_df(database_info, r_group_names, r_dots_right_aligned, r_cylinder)
+    l_agg_df_right_aligned = build_me_df(database_info, l_group_names, l_dots_right_aligned, l_cylinder)
+    righties_ra = r_agg_df_right_aligned.groupby('time').mean()
+    lefties_ra = l_agg_df_right_aligned.groupby('time').mean()
+    final_right_aligned = righties_ra['ME'] - lefties_ra['ME']
 
-    righties = r_agg_df.groupby('time').mean()
-    lefties = l_agg_df.groupby('time').mean()
-
-    final = righties['ME'] - lefties['ME']
-    return final
+    return final_left_aligned, final_right_aligned, counts
 
 
 def artificial_decide(df, cp_time):
@@ -125,22 +148,40 @@ def compute_artificial_dm_kernels(cylinder, object_names, uniform_shape, databas
     # truncate to minimum number of frames (left time-alignment)
     min_num_frames = min(min(r_k.shape[2], l_k.shape[2]) for r_k, l_k in zip(r_dots, l_dots))
 
-    r_dots = [d[:, :, :min_num_frames] for d in r_dots]
-    l_dots = [d[:, :, :min_num_frames] for d in l_dots]
+    r_dots_la = [d[:, :, :min_num_frames] for d in r_dots]
+    l_dots_la = [d[:, :, :min_num_frames] for d in l_dots]
 
-    all_dots = r_dots + l_dots
-
-    agg_df = build_me_df(database_info, r_group_names, all_dots, cylinder)  # group names passed do not matter
-
+    # LEFT-ALIGNED
+    all_dots_la = r_dots_la + l_dots_la
+    agg_df_la = build_me_df(database_info, r_group_names, all_dots_la, cylinder)  # group names passed do not matter
     # compute artificial decision
-    agg_df = agg_df.groupby('trial').apply(artificial_decide, 0.2)
-
-    righties = agg_df[agg_df['dir_choice'] == 'right'].groupby('time').mean()
-    lefties = agg_df[agg_df['dir_choice'] == 'left'].groupby('time').mean()
-
+    agg_df_la = agg_df_la.groupby('trial').apply(artificial_decide, 0.2)
+    counts_la = {
+        'left_answer_trials': len(agg_df_la[agg_df_la['dir_choice'] == 'left']),
+        'right_answer_trials': len(agg_df_la[agg_df_la['dir_choice'] == 'right'])
+    }
+    righties_la = agg_df_la[agg_df_la['dir_choice'] == 'right'].groupby('time').mean()
+    lefties_la = agg_df_la[agg_df_la['dir_choice'] == 'left'].groupby('time').mean()
     # final might well contain only NaN values, if 0 trials with a particular choice appear
-    final = righties['ME'] - lefties['ME']
-    return final
+    final_la = righties_la['ME'] - lefties_la['ME']
+
+    # RIGHT ALIGNED
+    r_dots_ra = [d[:, :, -min_num_frames:] for d in r_dots]
+    l_dots_ra = [d[:, :, -min_num_frames:] for d in l_dots]
+    all_dots_ra = r_dots_ra + l_dots_ra
+    agg_df_ra = build_me_df(database_info, r_group_names, all_dots_ra, cylinder)  # group names passed do not matter
+    # compute artificial decision
+    agg_df_ra = agg_df_ra.groupby('trial').apply(artificial_decide, 0.2)
+    counts_ra = {
+        'left_answer_trials': len(agg_df_ra[agg_df_ra['dir_choice'] == 'left']),
+        'right_answer_trials': len(agg_df_ra[agg_df_ra['dir_choice'] == 'right'])
+    }
+    righties_ra = agg_df_ra[agg_df_ra['dir_choice'] == 'right'].groupby('time').mean()
+    lefties_ra = agg_df_ra[agg_df_ra['dir_choice'] == 'left'].groupby('time').mean()
+    # final might well contain only NaN values, if 0 trials with a particular choice appear
+    final_ra = righties_ra['ME'] - lefties_ra['ME']
+
+    return final_la, final_ra, counts_la, counts_ra
 
 
 def get_object_names_in_db(file_path):
@@ -164,7 +205,7 @@ def get_names(restr_vals, name_list):
     """
     my_round = (lambda x: str(round(float(x), 1)))
     maps = {
-        'subject': {i: 'subj' + str(i) for i in range(10, 10+50)},
+        'subject': {i: 'subj' + str(i) for i in range(10, 10+100)},
         'pcp': {k: 'probCP' + my_round(k) for k in [0.3, 0.7]},
         'coh': {0: 'coh0', 100: 'coh100', 'fcn': my_round},
         'ans': {'l': 'ansleft', 'r': 'ansright'},
@@ -331,12 +372,14 @@ def create_filters_id(filters):
     return filters_id
 
 
-def build_me_df(database_info, group_names, dots, dset_def):
+def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False):
     """
     computes motion energy on a bank of trials and return results as pandas.DataFrame
     :param database_info: dict returned by dotsDB.inspect_database()
     :param group_names: list of group names
     :param dots: list of numpy arrays as returned by extract_list_arrays()
+    :param dset_def:
+    :param time_offset: constant in sec to add to time vector
     :return: pandas.DataFrame in long format with main columns 'ME' and 'time'
     """
     # it is convenient to put the attributes in a dict format
@@ -363,6 +406,10 @@ def build_me_df(database_info, group_names, dots, dset_def):
         motion_energy = dots_energy[trial].sum(axis=(0, 1))
 
         time_points = kiani_me.filter_grid(dots[trial].shape[2], 1 / attrs_dict['frame_rate'])
+        # todo: deal with right-aligned case
+        if right_aligned:
+            mirrored_times = [t for t]
+
         assert len(time_points) > 0
 
         for time_point in range(len(time_points)):
