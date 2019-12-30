@@ -27,7 +27,7 @@ function [dots_params, frames] = reproduce_dots(session_timestamp, debug_flag)
 DATA_FOLDER = ['/Users/adrian/oneCP/Fall_2019/raw/', ...
     session_timestamp, '/'];
 FILE_NAME = ['completed4AFCtrials_task100_date_', ...
-    session_timestamp, '.csv'];
+    session_timestamp, '.csv'];  
 FIRA = [DATA_FOLDER, FILE_NAME];
 DOTS = [DATA_FOLDER, session_timestamp, '_dotsPositions.csv'];
 disp(DOTS)
@@ -87,6 +87,8 @@ function [params, real_dur] = extract_dots_params(one_row)
 % get dots stimulus parameter from table's single row
     params = table2struct(one_row);
     real_dur = params.dotsOff - params.dotsOn;
+    
+    % remove unnecessary fields
     params = rmfield(params, { ...
         'taskID', ...
         'trialIndex', ...
