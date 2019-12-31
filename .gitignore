@@ -45,3 +45,4 @@ Python/notebooks/dots_log.txt
 Python/notebooks/hundredcoh_rightdir.ipynb
 Python/notebooks/zerocoh_MEdiff_vd400_nocp.ipynb
 Python/notebooks/zerocoh_bytruedir.ipynb
+*.h5

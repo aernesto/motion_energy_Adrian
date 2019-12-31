@@ -185,6 +185,14 @@ def compute_artificial_dm_kernels(cylinder, object_names, uniform_shape, databas
 
 
 def get_object_names_in_db(file_path):
+    """
+    inspects a dotsDB database file and returns object names and attributes
+    :param file_path: full path to dotsDB database
+    :return: (object_names, database_info) where
+             object_names is a list of strings, each one representing the full name of the HDF5 object.
+                (only groups with non-empty attributes and non-empty datasets populate this list)
+             database_info is a dict returned by dotsDB.inspect_db()
+    """
     database_info = dDB.inspect_db(file_path)
     object_names = []  # list of object names in database
     idx = 0
@@ -361,6 +369,18 @@ def create_dset_id(db_file, dset_name):
     return db_name + direction + coherence
 
 
+def create_filters(attributes_dict, filter_shape=(32, 32, 6)):
+    """
+    create filters required to compute motion energy
+    :param attributes_dict: attrs object from h5py, as a dict
+    :param filter_shape: 3-tuple as required by kiani_me.motion_filters()
+    :return: filter object (see kiani_me.motion_filters())
+    """
+    ppd, frame_rate = attributes_dict['pixels_per_degree'], attributes_dict['frame_rate']
+    filter_res = 1 / ppd, 1 / ppd, 1 / frame_rate
+    return kiani_me.motion_filters(filter_shape, filter_res)
+
+
 def create_filters_id(filters):
     """create string to encode filters characteristics. This uses the named tuple structure kiani_me.FilterSet"""
     filters_id = ''
@@ -379,7 +399,8 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
     :param group_names: list of group names
     :param dots: list of numpy arrays as returned by extract_list_arrays()
     :param dset_def:
-    :param time_offset: constant in sec to add to time vector
+    :param right_aligned: whether time is right-aligned to trial end or not. If it is, then 0 denotes trial end
+                          and all other frames correspond to negative time values
     :return: pandas.DataFrame in long format with main columns 'ME' and 'time'
     """
     # it is convenient to put the attributes in a dict format
@@ -387,13 +408,7 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
     # pprint.pprint(attrs_dicts)
     attrs_dict = attrs_dicts[0]  # pick any dict
 
-    # filter parameters (there are more, with default values)
-    ppd, framerate = attrs_dict['pixels_per_degree'], attrs_dict['frame_rate']
-    filter_shape = 32, 32, 6                 # size parameter of motion_filters()
-    filter_res = 1 / ppd, 1 / ppd, 1 / framerate
-
-    # construct filters
-    filters = kiani_me.motion_filters(filter_shape, filter_res)
+    filters = create_filters(attrs_dict)
 
     dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in dots]
 
@@ -406,9 +421,10 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
         motion_energy = dots_energy[trial].sum(axis=(0, 1))
 
         time_points = kiani_me.filter_grid(dots[trial].shape[2], 1 / attrs_dict['frame_rate'])
-        # todo: deal with right-aligned case
+
         if right_aligned:
-            mirrored_times = [t for t]
+            time_points = -time_points
+            time_points.sort()
 
         assert len(time_points) > 0
 
@@ -426,3 +442,56 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
             rows.append(row_as_dict)
 
     return pd.DataFrame(rows)
+
+
+def extract_me_full_database(db_filename):
+    """
+    goes through all the trials contained in a dotsDB database and returns a pandas.DataFrame
+    with the trial-by-trial motion energy
+    :param db_filename: (str) full path to .h5 file
+    :return: pandas.DataFrame with columns
+             * ME            motion energy
+             * time          time in sec
+             * coherence     coherence (always positive)
+             * direction     direction at start of trial
+             * presence_cp   bool
+             * tot_trials    number of trials in the database for these nominal stimulus conditions
+    """
+    # inspect database
+    object_names, db_info = get_object_names_in_db(db_filename)
+
+    # split objects into group and dataset categories
+    objects = []
+    for obj in object_names:
+        if obj[-3:] == '/px':
+            objects.append((obj[:-3], obj))  # append tuple (group_name, dataset_name)
+
+    # loop through datasets and compute me
+    dset_mes = []  # global list
+    for gname, dname in objects:
+        tot_trials = db_info[dname]['shape'][0]
+        presence_cp = gname[-3:] == '0.2'
+
+        # create filters required for motion energy computation
+        filters = create_filters(dict(db_info[gname]['attrs']))
+
+        # compute motion energy
+        mes = compute_motion_energy_for_trials_in_db(
+            db_filename,
+            dname,
+            gname,
+            list(range(1, tot_trials + 1)),
+            filters
+        )
+
+        # post-process df
+        del mes['dsetID']
+        del mes['filtersID']
+        del mes['density']
+        mes['presence_cp'] = presence_cp
+        mes['tot_trials'] = tot_trials
+
+        # update global list
+        dset_mes.append(mes)
+
+    return pd.concat(dset_mes)
