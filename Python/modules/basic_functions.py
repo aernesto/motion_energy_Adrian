@@ -237,9 +237,10 @@ def write_dots_to_file(df, hdf5_file):
     stimulus = ddb.DotsStimulus(**parameters)
 
     try:
+        # todo: update w.r.t dotsDB
         ddb.write_stimulus_to_file(stimulus, 1, hdf5_file,
                                    pre_generated_stimulus=[frames],
-                                   group_name=gn, append_to_group=True, max_trials=50)
+                                   group_name=gn, append_to_group=True, initial_shape=50)
     except TypeError:
         print(f'group name {gn}')
         print(f'type(frames) = {type(frames)}, len(frames)= {len(frames)}, frames[0].shape = {frames[0].shape}')
