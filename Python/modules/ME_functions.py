@@ -308,9 +308,11 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     db_info = dDB.inspect_db(db_file)
     attrs_dict = dict(db_info[gp_name]['attrs'])
 
-    dots = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
-    dots = [a for a in dots if np.size(a) > 0]  # the if condition removes the empty datasets
+    zipped_dots = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_num) for trial_num in trial_list]
+    zipped_dots = [a for a in zipped_dots if np.size(a[0]) > 0]  # the if condition removes the empty datasets
 
+    # ref: https://stackoverflow.com/a/13635074/8787400
+    dots, list_trials_params = zip(*zipped_dots)
     dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in dots]
 
     #  1. initialize dataframes of correct size, with correct row and column names, filled with NaN values

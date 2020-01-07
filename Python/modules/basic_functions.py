@@ -129,15 +129,25 @@ def set_nans(df):
 def get_frames(df):
     """
     get the dots data as a list of numpy arrays, as dotsDB requires them
+    also returns a list of dicts, all having the keys: 'timestamp', 'coherence', 'endDirection', 'numberFramesPreCP',
+    'numberFramesPostCP'. Length of the two lists are equal.
     """
     # (could/should probably be re-written with groupby and apply...)
     num_frames = np.max(df["frameIdx"]).astype(int)
     assert not np.isnan(num_frames), 'NaN num_frames'
-    list_of_frames = []
+    list_of_frames, list_of_params = [], []
     for fr in range(num_frames):
         frame_data = df[df["frameIdx"] == (fr+1)]
-        list_of_frames.append(np.array(frame_data[['ypos','xpos']]))  # here I swap xpos with ypos for dotsDB
-    return list_of_frames
+        list_of_frames.append(np.array(frame_data[['ypos', 'xpos']]))  # here I swap xpos with ypos for dotsDB
+        sub_df = frame_data.iloc[0, :]
+        list_of_params.append({
+            'timestamp': float(sub_df[['date']]),
+            'coherence': float(sub_df[['coherence']]),
+            'endDirection': float(sub_df[['direction']]),
+            'numberFramesPreCP': float(sub_df[['numberDrawPreCP']]),
+            'numberFramesPostCP': float(sub_df[['numberDrawPostCP']])
+        })
+    return list_of_frames, list_of_params
 
 
 def get_group_name(df):
@@ -179,8 +189,8 @@ def get_group_name(df):
         """
         return 'left' if d else 'right'
 
-    ss, pp, cc, ch, cp, vd, di, cpt= df[['subject', 'probCP', 'coherence', 'dirChoice', 'presenceCP',
-                               'viewingDuration', 'initDirection', 'finalCPTime']].values[0,:]
+    ss, pp, cc, ch, cp, vd, di, cpt = df[['subject', 'probCP', 'coherence', 'dirChoice', 'presenceCP',
+                               'viewingDuration', 'initDirection', 'finalCPTime']].values[0, :]
 
     ss = str(ss)
     group_name = '/subj' + ss + \
@@ -208,7 +218,7 @@ def write_dots_to_file(df, hdf5_file):
     The aim of this function is to write the dots info contained in the pandas.DataFrame df to a dotsDB HDF5 file.
     df should only contain data about a single trial.
 
-    head on df looks like this
+    outdated head on df looks like this
     xpos	ypos	isCoherent	frameIdx	seqDumpTime	pilotID	taskID	coherence	viewingDuration	presenceCP	initDirection	subject	block	probCP	cpChoice	trueVD	trialEnd	dirChoice
 	0.722093	0.416122	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
 	0.681785	0.356234	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
@@ -216,7 +226,7 @@ def write_dots_to_file(df, hdf5_file):
 	0.833181	0.112126	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
 	0.013516	0.354543	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
     """
-    frames = get_frames(df)
+    frames, extra_params = get_frames(df)
     gn, params = get_group_name(df)
 
     # exit function if number of frames too different from theoretical one
@@ -229,12 +239,12 @@ def write_dots_to_file(df, hdf5_file):
 
     cptime = params['cpTime'] if params['presenceCP'] else None
     parameters = dict(speed=5,
-                      density=90,
+                      density=150,
                       coh_mean=params['coh'],
                       coh_stdev=10,
                       direction=params['initDirection'],
                       num_frames=np.max(df["frameIdx"]).astype(int),
-                      diameter=5,
+                      diameter=8,
                       pixels_per_degree=(55.4612 / 2),
                       dot_size_in_pxs=3,
                       cp_time=cptime)
@@ -242,8 +252,7 @@ def write_dots_to_file(df, hdf5_file):
     stimulus = ddb.DotsStimulus(**parameters)
 
     try:
-        # todo: update w.r.t dotsDB
-        ddb.write_stimulus_to_file(stimulus, 1, hdf5_file,
+        ddb.write_stimulus_to_file(stimulus, 1, hdf5_file, extra_params,
                                    pre_generated_stimulus=[frames],
                                    group_name=gn, append_to_group=True, initial_shape=50)
     except TypeError:
