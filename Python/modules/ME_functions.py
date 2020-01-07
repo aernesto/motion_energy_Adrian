@@ -265,7 +265,7 @@ def extract_list_arrays(group_names, dset_names, uniform_shape, file_path):
         except AssertionError:
             print(f'failure for dataset {ds} and group {gs}')
         else:
-            dots += arrays
+            dots += arrays  # concatenates lists
     return dots
 
 
@@ -285,32 +285,54 @@ def map_snow_dots_params_to_kiani_dots(param_dict):
     return new_dict
 
 
-def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_list, filters, append_to=None,
-                                           create_dsetid=True):
+def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_list, filters,
+                                           append_to=None, create_dsetid=True):
     """
     Computes the motion energy (ME) for trials of the dots stimulus. An ME value is obtained for each trial and each
-    timestep. Results are returned as pandas.DataFrame.
+    timestep. Results are returned as two pandas.DataFrame objects, one for left-aligned time, one for right-aligned
+    time.
 
     :param db_file: full path to hdf5 file created with the dotsDB module
     :param dset_name: name of dataset inside hdf5 file (full path)
     :param gp_name: name of group inside hdf5 file (full path)
     :param trial_list: list of positive integers indicating the trials to extract
     :param filters: filters as outputted by motion_filters()
-    :param append_to: pandas data frame. If None, a data frame is created, otherwise, rows are appended.
+    :param append_to: List or tuple of 2 pandas data frames, the first one with left-aligned time and the second one
+                      with right-aligned time. If None, data frames are created, otherwise, rows are appended.
     :param create_dsetid: (bool). if True, create_dset_id() is called to fill the dataframe field.
-        Otherwise use dset_name
-    :return: a pandas data frame in long format with the following columns
-        dsetID; filtersID; trial; time; ME; direction; coherence; density
-        If append_to is not None, data is appended to the append_to data frame (returns a copy)
+                          Otherwise use dset_name
+    :return: two pandas data frames in wide format with the same columns as the ones described in the docstring of
+             extract_me_full_database()
+             If append_to is not None, data is appended to the data frames from append_to (returns a copy)
     """
     db_info = dDB.inspect_db(db_file)
     attrs_dict = dict(db_info[gp_name]['attrs'])
 
-    trials = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
-    dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in trials]
+    dots = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_number) for trial_number in trial_list]
+    dots = [a for a in dots if np.size(a) > 0]  # the if condition removes the empty datasets
 
-    # list of dict that will become a data frame
-    rows = []
+    dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in dots]
+
+    #  1. initialize dataframes of correct size, with correct row and column names, filled with NaN values
+    row_names = list(range(len(dots_energy)))
+
+    col_names = [
+        'timestamp',
+        'coherence',
+        'endDirection',
+        'numberFramesPreCP',
+        'numberFramesPostCP'
+    ]
+
+    assert all(set(col_names) == set(pp.keys()) for pp in list_trials_params), 'list of passed params has wrong keys'
+
+    time_start_index = len(col_names)
+    upper_bound_frame_number = 39  # corresponds to a 650 msec long trial at 60 Hz.
+    template_time_points = kiani_me.filter_grid(upper_bound_frame_number, 1 / attrs_dict['frame_rate'])
+    col_names += [f'{t:.4f}' for t in template_time_points]  # truncate time values to 4 decimals
+
+    left_df = pd.DataFrame(np.nan, index=row_names, columns=col_names)
+    right_df = pd.DataFrame(np.nan, index=row_names, columns=col_names)
 
     filters_id = create_filters_id(filters)
     if create_dsetid:
@@ -318,29 +340,25 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     else:
         dataset_id = dset_name
 
+    #  2. fill out dataframes row by row (one trial per row)
     for trial in range(len(trial_list)):
+
+        # info columns
+        for kkey in list_trials_params[trial].keys():
+            for ddf in (left_df, right_df):
+                ddf.loc[trial, kkey] = list_trials_params[kkey]
+
+        # time columns
         motion_energy = dots_energy[trial].sum(axis=(0, 1))
-
-        time_points = kiani_me.filter_grid(trials[trial].shape[2], 1 / attrs_dict['frame_rate'])
-        assert len(time_points) > 0
-
-        for time_point in range(len(time_points)):
-            row_as_dict = {
-                'dsetID': dataset_id,
-                'filtersID': filters_id,
-                'trial': trial_list[trial],
-                'time': time_points[time_point],
-                'ME': motion_energy[time_point],
-                'direction': attrs_dict['direction'],
-                'coherence': attrs_dict['coh_mean'],
-                'density': attrs_dict['density']
-            }
-            rows.append(row_as_dict)
+        num_time_points = len(motion_energy)
+        left_df.iloc[trial, time_start_index:time_start_index + num_time_points] = motion_energy
+        right_df.iloc[trial, time_start_index:time_start_index + num_time_points] = list(reversed(motion_energy))
 
     if append_to is None:
-        return pd.DataFrame(rows)
+        return left_df, right_df
     else:
-        return pd.concat([append_to, pd.DataFrame(rows)], ignore_index=True)
+        # the line below simply returns the two data frames from append_to as a tuple, after having appended the data
+        return tuple([pd.concat([append_to[x], df], ignore_index=True) for x, df in zip([0, 1], [left_df, right_df])])
 
 
 def create_dset_id(db_file, dset_name):
@@ -446,16 +464,25 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
 
 def extract_me_full_database(db_filename):
     """
-    goes through all the trials contained in a dotsDB database and returns a pandas.DataFrame
+    goes through all the trials contained in a dotsDB database and returns two pandas.DataFrame
     with the trial-by-trial motion energy
     :param db_filename: (str) full path to .h5 file
-    :return: pandas.DataFrame with columns
-             * ME            motion energy
-             * time          time in sec
-             * coherence     coherence (always positive)
-             * direction     direction at start of trial
-             * presence_cp   bool
-             * tot_trials    number of trials in the database for these nominal stimulus conditions
+    :return: two pandas.DataFrame objects. First columns are always:
+             * timestamp           (str) e.g. '2020_01_07_11_34'
+             * coherence           (float) coherence (always positive), e.g. 18.4
+             * endDirection        'left' or 'right' -- direction at end of trial
+             * numberFramesPreCP   int
+             * numberFramesPostCP  int   0 if there wasn't any change-points
+             The remaining columns have times in seconds as names, like '0.22332'
+             For the left-aligned dataframe (first returned object), these times
+             represent real time points during the trial.
+             For the right-aligned dataframe (second returned object), these times
+             should be interpreted as negative times running from the end of the trial.
+             So, for the right-aligned data.frame, the column '0.0' will contain
+             motion energy values at the end of the trial. The column '0.16663' will
+             contain motion energy values 160 msec prior to trial end, etc.
+             Time points that fall outside the actual viewing duration for each
+             trial are filled with NaN values.
     """
     # inspect database
     object_names, db_info = get_object_names_in_db(db_filename)
@@ -467,31 +494,26 @@ def extract_me_full_database(db_filename):
             objects.append((obj[:-3], obj))  # append tuple (group_name, dataset_name)
 
     # loop through datasets and compute me
-    dset_mes = []  # global list
+    dset_mes_left, dset_mes_right = [], []
     for gname, dname in objects:
         tot_trials = db_info[dname]['shape'][0]
-        presence_cp = gname[-3:] == '0.2'
+        # presence_cp = gname[-3:] == '0.2'
 
         # create filters required for motion energy computation
         filters = create_filters(dict(db_info[gname]['attrs']))
 
         # compute motion energy
-        mes = compute_motion_energy_for_trials_in_db(
+        mes_left, mes_right = compute_motion_energy_for_trials_in_db(
             db_filename,
             dname,
             gname,
             list(range(1, tot_trials + 1)),
-            filters
+            filters,
+            create_dsetid=False
         )
 
-        # post-process df
-        del mes['dsetID']
-        del mes['filtersID']
-        del mes['density']
-        mes['presence_cp'] = presence_cp
-        mes['tot_trials'] = tot_trials
-
         # update global list
-        dset_mes.append(mes)
+        dset_mes_left.append(mes_left)
+        dset_mes_right.append(mes_right)
 
-    return pd.concat(dset_mes)
+    return pd.concat(dset_mes_left), pd.concat(dset_mes_right)

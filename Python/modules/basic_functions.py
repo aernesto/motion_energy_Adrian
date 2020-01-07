@@ -5,15 +5,17 @@ import os
 import dots_db.dotsDB.dotsDB as ddb
 
 
-def label_dots(timestamps, global_labeled_dots_filename, data_folder):
+def label_dots(timestamps, data_folder, return_df=False, global_labeled_dots_filename=None):
     """
     fetches dots data outputted by MATLAB (the _dotsPositions.csv files) for specified session timestamps, adds
     relevant fira data (join operation) and appends resulting 'labeled_dots' dataframe to the 
     global_labeled_dots_filename.
     :param timestamps: list or tuple of strings of the form '2019_11_05_16_19'
-    :param global_labeled_dots_filename: string with full path and filename for global .csv file to write to
     :param data_folder: string with path to folder '.../raw/' where fira and dotsPositions .csv data reside.
-    :return: None, but writes to file
+    :param return_df: (bool) If True, a pandas.DataFrame is returned
+    :param global_labeled_dots_filename: string with full path and filename for global .csv file to write to.
+                                         If None, no file is written.
+    :return: Either a pandas.DataFrame or None. Might also write to file depending on arg.
     """
     list_of_labeled_dots_dataframes = []
     for ts in timestamps:
@@ -31,10 +33,10 @@ def label_dots(timestamps, global_labeled_dots_filename, data_folder):
         labeled_dots = dots.join(fira, on="trialIx")
         labeled_dots['trueVD'] = labeled_dots['dotsOff'] - labeled_dots['dotsOn']
         labeled_dots['presenceCP'] = labeled_dots['reversal'] > 0
-        to_drop = ['trialIndex', 'RT', 'cpRT', 'dirCorrect', 'cpCorrect', 
-            'randSeedBase', 'fixationOn', 'fixationStart', 'targetOn',
-            'choiceTime', 'cpChoiceTime', 'blankScreen', 'feedbackOn', 
-            'cpScreenOn', 'dummyBlank', 'finalDuration', 'dotsOn', 'dotsOff']
+        to_drop = ['trialIndex', 'RT', 'cpRT', 'dirCorrect', 'cpCorrect',
+                   'randSeedBase', 'fixationOn', 'fixationStart', 'targetOn',
+                   'choiceTime', 'cpChoiceTime', 'blankScreen', 'feedbackOn',
+                   'cpScreenOn', 'dummyBlank', 'finalDuration', 'dotsOn', 'dotsOff']
         labeled_dots.drop(columns=to_drop, inplace=True)
         to_rename = {
             'duration': 'viewingDuration',
@@ -44,15 +46,18 @@ def label_dots(timestamps, global_labeled_dots_filename, data_folder):
         labeled_dots.dropna(subset=['dirChoice'], inplace=True)
         list_of_labeled_dots_dataframes.append(labeled_dots)
         
-    # only write to file if list of dataframes is not empty
+    # only proceed if list of dataframes is not empty
     if list_of_labeled_dots_dataframes:
         full_labeled_dots = pd.concat(list_of_labeled_dots_dataframes)
-        if os.path.exists(global_labeled_dots_filename):
-            full_labeled_dots.to_csv(global_labeled_dots_filename, index=False, mode='a+', header=False)
+        if global_labeled_dots_filename:  # kwarg is not None
+            if os.path.exists(global_labeled_dots_filename):  # file already exists --> append data
+                full_labeled_dots.to_csv(global_labeled_dots_filename, index=False, mode='a+', header=False)
+            else:  # file doesn't exist --> create it
+                full_labeled_dots.to_csv(global_labeled_dots_filename, index=False, mode='a+', header=True)
+        if return_df:  # DataFrame should be returned
+            return full_labeled_dots
         else:
-            full_labeled_dots.to_csv(global_labeled_dots_filename, index=False, mode='a+', header=True)
-            
-    return None
+            return None
 
 
 def inspect_csv(df):
