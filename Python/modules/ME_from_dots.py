@@ -41,47 +41,50 @@ if __name__ == '__main__':
                          'existing session for which the dotsPositions.csv file exists')
     timestamp = sys.argv[1]
 
-    # """
-    # Note the precaution I take below to ensure labeled dots file doesn't exist.
-    # """
-    # labeled_dots_filename = DOTS_LABELED_FOLDER + 'dots_labeled_' + timestamp + '.csv'
-    # if os.path.exists(labeled_dots_filename):
-    #     raise ValueError('Labeled dots file already exists')
+    h5_filename = DOTS_LABELED_FOLDER + 'dotsDB_' + timestamp + '.h5'
 
-    # first arg needs to be an iterable
-    dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True)
+    # only process the dotsPositions file if the corresponding HDF5 doesn't exist
+    if not os.path.exists(h5_filename):
+        try:
+            # display some info for user
+            print()
+            print(f'Starting the processing of *dotsPositions.csv file with timestamp {timestamp}')
 
-    gb = dots.groupby('trialEnd')
+            # first arg needs to be an iterable
+            dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True)
 
-    # todo: any chance I can short-circuit the HDF5 storage step?
-    # write dots to HDF5 file
-    h5_filename = DOTS_LABELED_FOLDER + timestamp + '.h5'
+            gb = dots.groupby('trialEnd')
+            # write dots to HDF5 file
+            print(f'About to create file {h5_filename}')
+            _ = gb.apply(basic_func.write_dots_to_file, h5_filename)
+        except AssertionError:
+            os.remove(h5_filename)
+            raise
 
-    # Recall func is called twice the first time!
-    _ = gb.apply(basic_func.write_dots_to_file, h5_filename)
+        # Recall func is called twice the first time!
+        # need to go in manually and delete the first entry in the dataset corresponding to
+        # the first group element gb.groups.keys()[0]
+        single_row = dots[dots['trialEnd'] == list(gb.groups.keys())[0]]
+        gname, vals = basic_func.get_group_name(single_row)
+        pb_dset_name = gname + '/px'
+        pb_pdset_name = gname + '/paramdset'
 
-    # need to go in manually and delete the first entry in the dataset corresponding to
-    # the first group element gb.groups.keys()[0]
-    single_row = dots[dots['trialEnd'] == list(gb.groups.keys())[0]]
-    pb_dset_name, vals = basic_func.get_group_name(single_row)
-    pb_dset_name += '/px'
-    f = h5py.File(h5_filename, 'r+')  # read/write
-    d = f[pb_dset_name]
-    d = d[1:]  # override first trial
-    f.__delitem__(pb_dset_name)
-    f[pb_dset_name] = d
-    f.close()
+        f = h5py.File(h5_filename, 'r+')  # read/write
+        d = f[pb_dset_name]
+        pdset = f[pb_pdset_name]
+        d = d[1:]  # override first trial
+        pdset = pdset[1:]
+        f.__delitem__(pb_dset_name)
+        f.__delitem__(pb_pdset_name)
+        f[pb_dset_name] = d
+        f[pb_pdset_name] = pdset
+        f.close()
 
-    # todo: get the rest of the script right
     # Now, we need to compute motion energy
-    left_aligned, right_aligned = my_me.extract_me_full_database(h5_filename)
+    motion_energy = my_me.extract_me_full_database(h5_filename)
 
     # and write it to file
-    left_aligned.to_csv(
-        DOTS_LABELED_FOLDER + timestamp + '_left_aligned_motion_energy.csv',
-        index=False
-    )
-    right_aligned.to_csv(
-        DOTS_LABELED_FOLDER + timestamp + '_right_aligned_motion_energy.csv',
+    motion_energy.to_csv(
+        DOTS_LABELED_FOLDER + timestamp + '_motion_energy.csv',
         index=False
     )

@@ -8,6 +8,8 @@ import sys
 # sys.path.insert(0, 'dots_db/dotsDB/')
 import dots_db.dotsDB.dotsDB as dDB
 
+NUM_PROCESSED_TRIALS = {'2D ME': 0, '1D ME': 0}
+
 
 def plot_cyl(db_info, fixed_length, cylinders, object_names, path_to_file, cyl_number,
              plot=True, return_series=False, w=16, h=10, real=True):
@@ -305,15 +307,31 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
              extract_me_full_database()
              If append_to is not None, data is appended to the data frames from append_to (returns a copy)
     """
+    global NUM_PROCESSED_TRIALS  # to provide feedback to user
     db_info = dDB.inspect_db(db_file)
     attrs_dict = dict(db_info[gp_name]['attrs'])
 
-    zipped_dots = [dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_num) for trial_num in trial_list]
-    zipped_dots = [a for a in zipped_dots if np.size(a[0]) > 0]  # the if condition removes the empty datasets
+    if gp_name[-1] == '/':
+        param_dset_name = gp_name + 'paramdset'
+    else:
+        param_dset_name = gp_name + '/paramdset'
+
+    zipped_dots = []
+    for trial_num in trial_list:
+        extracted = dDB.extract_trial_as_3d_array(db_file, dset_name, gp_name, trial_num, param_dset_name)
+        if np.size(extracted[0]) > 0:
+            zipped_dots.append(extracted)
+        # with the current workflow, printing a message in the next else block generates too many output lines
+        # else:
+        #     print(f'trial {trial_num} skipped as empty in DB')
 
     # ref: https://stackoverflow.com/a/13635074/8787400
     dots, list_trials_params = zip(*zipped_dots)
-    dots_energy = [kiani_me.apply_motion_energy_filters(x, filters) for x in dots]
+    dots_energy = []
+    for x in dots:
+        dots_energy.append(kiani_me.apply_motion_energy_filters(x, filters))
+        NUM_PROCESSED_TRIALS['2D ME'] += 1
+        print(NUM_PROCESSED_TRIALS)
 
     #  1. initialize dataframes of correct size, with correct row and column names, filled with NaN values
     row_names = list(range(len(dots_energy)))
@@ -336,26 +354,32 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     left_df = pd.DataFrame(np.nan, index=row_names, columns=col_names)
     right_df = pd.DataFrame(np.nan, index=row_names, columns=col_names)
 
-    filters_id = create_filters_id(filters)
-    if create_dsetid:
-        dataset_id = create_dset_id(db_file, dset_name)
-    else:
-        dataset_id = dset_name
+    # filters_id = create_filters_id(filters)
+    # if create_dsetid:
+    #     dataset_id = create_dset_id(db_file, dset_name)
+    # else:
+    #     dataset_id = dset_name
 
     #  2. fill out dataframes row by row (one trial per row)
-    for trial in range(len(trial_list)):
+    for trial in range(len(list_trials_params)):
 
         # info columns
-        for kkey in list_trials_params[trial].keys():
-            for ddf in (left_df, right_df):
-                ddf.loc[trial, kkey] = list_trials_params[kkey]
-
+        try:
+            for kkey in list_trials_params[trial].keys():
+                for ddf in (left_df, right_df):
+                    ddf.loc[trial, kkey] = list_trials_params[trial][kkey]
+        except IndexError:
+            print(type(list_trials_params))
+            print(len(list_trials_params), trial)
+            print(list_trials_params[0])
+            raise
         # time columns
         motion_energy = dots_energy[trial].sum(axis=(0, 1))
         num_time_points = len(motion_energy)
         left_df.iloc[trial, time_start_index:time_start_index + num_time_points] = motion_energy
         right_df.iloc[trial, time_start_index:time_start_index + num_time_points] = list(reversed(motion_energy))
-
+        NUM_PROCESSED_TRIALS['1D ME'] += 1
+        print(NUM_PROCESSED_TRIALS)
     if append_to is None:
         return left_df, right_df
     else:
@@ -469,7 +493,7 @@ def extract_me_full_database(db_filename):
     goes through all the trials contained in a dotsDB database and returns two pandas.DataFrame
     with the trial-by-trial motion energy
     :param db_filename: (str) full path to .h5 file
-    :return: two pandas.DataFrame objects. First columns are always:
+    :return: one pandas.DataFrame objects. First columns are always:
              * timestamp           (str) e.g. '2020_01_07_11_34'
              * coherence           (float) coherence (always positive), e.g. 18.4
              * endDirection        'left' or 'right' -- direction at end of trial
@@ -478,13 +502,6 @@ def extract_me_full_database(db_filename):
              The remaining columns have times in seconds as names, like '0.22332'
              For the left-aligned dataframe (first returned object), these times
              represent real time points during the trial.
-             For the right-aligned dataframe (second returned object), these times
-             should be interpreted as negative times running from the end of the trial.
-             So, for the right-aligned data.frame, the column '0.0' will contain
-             motion energy values at the end of the trial. The column '0.16663' will
-             contain motion energy values 160 msec prior to trial end, etc.
-             Time points that fall outside the actual viewing duration for each
-             trial are filled with NaN values.
     """
     # inspect database
     object_names, db_info = get_object_names_in_db(db_filename)
@@ -497,6 +514,7 @@ def extract_me_full_database(db_filename):
 
     # loop through datasets and compute me
     dset_mes_left, dset_mes_right = [], []
+
     for gname, dname in objects:
         tot_trials = db_info[dname]['shape'][0]
         # presence_cp = gname[-3:] == '0.2'
@@ -505,7 +523,7 @@ def extract_me_full_database(db_filename):
         filters = create_filters(dict(db_info[gname]['attrs']))
 
         # compute motion energy
-        mes_left, mes_right = compute_motion_energy_for_trials_in_db(
+        mes_left, _ = compute_motion_energy_for_trials_in_db(
             db_filename,
             dname,
             gname,
@@ -516,6 +534,5 @@ def extract_me_full_database(db_filename):
 
         # update global list
         dset_mes_left.append(mes_left)
-        dset_mes_right.append(mes_right)
 
-    return pd.concat(dset_mes_left), pd.concat(dset_mes_right)
+    return pd.concat(dset_mes_left)

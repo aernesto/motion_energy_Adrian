@@ -126,26 +126,56 @@ def set_nans(df):
     return df
 
 
+def numeric_switch_direction(init_dir):
+    init_dir = int(init_dir)
+    authorized = {0, 180}
+    assert init_dir in authorized, f'direction argument {init_dir} should lie in {authorized}'
+    (other_dir,) = {0, 180} - {init_dir}
+    return other_dir
+
+
 def get_frames(df):
     """
     get the dots data as a list of numpy arrays, as dotsDB requires them
     also returns a list of dicts, all having the keys: 'timestamp', 'coherence', 'endDirection', 'numberFramesPreCP',
     'numberFramesPostCP'. Length of the two lists are equal.
+
+    :param df: (pandas.DataFrame)
+    :return: (2-tuple) list of frames and list of parameters
     """
     # (could/should probably be re-written with groupby and apply...)
     num_frames = np.max(df["frameIdx"]).astype(int)
     assert not np.isnan(num_frames), 'NaN num_frames'
     list_of_frames, list_of_params = [], []
+
+    # # DEBUG
+    # debug_counter = 1
+
     for fr in range(num_frames):
         frame_data = df[df["frameIdx"] == (fr+1)]
         list_of_frames.append(np.array(frame_data[['ypos', 'xpos']]))  # here I swap xpos with ypos for dotsDB
+
         sub_df = frame_data.iloc[0, :]
+        # # DEBUG
+        # if debug_counter:
+        #     print('---------------frame_data--------------')
+        #     print(type(frame_data))
+        #     print(frame_data.shape)
+        #     print(frame_data)
+        #     print('----------------sub_df-----------------')
+        #     print(type(sub_df))
+        #     print(sub_df.shape)
+        #     print(sub_df)
+        #     debug_counter = 0
+
+        init_direction = sub_df['initDirection']
+        end_direction = numeric_switch_direction(init_direction) if sub_df['presenceCP'] else init_direction
         list_of_params.append({
-            'timestamp': float(sub_df[['date']]),
-            'coherence': float(sub_df[['coherence']]),
-            'endDirection': float(sub_df[['direction']]),
-            'numberFramesPreCP': float(sub_df[['numberDrawPreCP']]),
-            'numberFramesPostCP': float(sub_df[['numberDrawPostCP']])
+            'timestamp': float(sub_df['date']),
+            'coherence': float(sub_df['coherence']),
+            'endDirection': float(end_direction),
+            'numberFramesPreCP': float(sub_df['numberDrawPreCP']),
+            'numberFramesPostCP': float(sub_df['numberDrawPostCP'])
         })
     return list_of_frames, list_of_params
 
@@ -215,16 +245,11 @@ def get_group_name(df):
 
 def write_dots_to_file(df, hdf5_file):
     """
-    The aim of this function is to write the dots info contained in the pandas.DataFrame df to a dotsDB HDF5 file.
+    write the dots info contained in the pandas.DataFrame df to a dotsDB HDF5 file.
     df should only contain data about a single trial.
 
-    outdated head on df looks like this
-    xpos	ypos	isCoherent	frameIdx	seqDumpTime	pilotID	taskID	coherence	viewingDuration	presenceCP	initDirection	subject	block	probCP	cpChoice	trueVD	trialEnd	dirChoice
-	0.722093	0.416122	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
-	0.681785	0.356234	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
-	0.445828	0.914470	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
-	0.833181	0.112126	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
-	0.013516	0.354543	1.0	1.0	1069.27719	2.0	3.0	48.5	0.3	0.0	180.0	S1	Block2	0.0	NaN	0.318517	1069.535562	0.0
+    :param df: (pandas.DataFrame)
+    :param hdf5_file: (str) full path to HDF5 file
     """
     frames, extra_params = get_frames(df)
     gn, params = get_group_name(df)
