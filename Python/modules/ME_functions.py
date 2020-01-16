@@ -488,11 +488,12 @@ def build_me_df(database_info, group_names, dots, dset_def, right_aligned=False)
     return pd.DataFrame(rows)
 
 
-def extract_me_full_database(db_filename):
+def extract_me_full_database(db_filename, shape_of_filters=(32, 32, 6)):
     """
     goes through all the trials contained in a dotsDB database and returns two pandas.DataFrame
     with the trial-by-trial motion energy
     :param db_filename: (str) full path to .h5 file
+    :param shape_of_filters: (tuple) kwarg that gets passed to :function:create_filters()
     :return: one pandas.DataFrame objects. First columns are always:
              * timestamp           (str) e.g. '2020_01_07_11_34'
              * coherence           (float) coherence (always positive), e.g. 18.4
@@ -520,7 +521,7 @@ def extract_me_full_database(db_filename):
         # presence_cp = gname[-3:] == '0.2'
 
         # create filters required for motion energy computation
-        filters = create_filters(dict(db_info[gname]['attrs']))
+        filters = create_filters(dict(db_info[gname]['attrs']), filter_shape=shape_of_filters)
 
         # compute motion energy
         mes_left, _ = compute_motion_energy_for_trials_in_db(

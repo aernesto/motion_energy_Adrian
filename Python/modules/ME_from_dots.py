@@ -24,6 +24,8 @@ import os.path
 import ME_functions as my_me
 import basic_functions as basic_func
 
+FILTER_SHAPE = (32, 32, 6)
+# shape of the filters used to compute motion energy in my_me.create_filters()
 
 # full local path to folder where labeled_dots*.csv and *ME_df.csv files will be written
 DOTS_LABELED_FOLDER = '/home/adrian/SingleCP_DotsReversal/Fall2019/processed/'
@@ -81,7 +83,7 @@ if __name__ == '__main__':
         f.close()
 
     # Now, we need to compute motion energy
-    motion_energy = my_me.extract_me_full_database(h5_filename)
+    motion_energy = my_me.extract_me_full_database(h5_filename, shape_of_filters=FILTER_SHAPE)
 
     # and write it to file
     motion_energy.to_csv(
