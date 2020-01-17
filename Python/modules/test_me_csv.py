@@ -17,6 +17,7 @@ PROCESSED_FOLDER = '/home/adrian/SingleCP_DotsReversal/Fall2019/processed/'
 ME_CSV_FILENAME = TIMESTAMP + '_motion_energy.csv'
 RAW_FOLDER = '/home/adrian/SingleCP_DotsReversal/Fall2019/raw/' + TIMESTAMP + '/'
 FIRA_FILENAME = 'completed4AFCtrials_task100_date_' + TIMESTAMP + '.csv'
+DOTS_FILENAME = TIMESTAMP + '_dotsPositions.csv'
 
 
 def is_sequence_int(seq):
@@ -44,13 +45,16 @@ def diagnose_int_sequence(seq, title=None):
             print()
     else:
         print("sequence has no aberrations")
+        print()
 
+# FIRA
 
 fira_data = pd.read_csv(RAW_FOLDER + FIRA_FILENAME)
 fira_trial_index = fira_data['trialIndex'].to_numpy(dtype=int)
 
 diagnose_int_sequence(fira_trial_index, title='diagnose FIRA trial index')
 
+# Motion Energy CSV
 trial_indices = []
 with open(PROCESSED_FOLDER + ME_CSV_FILENAME) as f:
     for row_ix, line in enumerate(f):
@@ -61,3 +65,9 @@ with open(PROCESSED_FOLDER + ME_CSV_FILENAME) as f:
 trial_indices = np.array(trial_indices)
 trial_indices.sort()
 diagnose_int_sequence(trial_indices, title='diagnostic on ME trial indices')
+
+# dotsPositions
+dots_data = pd.read_csv(RAW_FOLDER + DOTS_FILENAME)
+dots_trial_index = np.unique(dots_data['trialIx'].to_numpy(dtype=int))
+dots_trial_index.sort()
+diagnose_int_sequence(dots_trial_index, title='diagnostic on dotsPositions trial indices')
