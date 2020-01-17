@@ -53,7 +53,7 @@ if __name__ == '__main__':
             print(f'Starting the processing of *dotsPositions.csv file with timestamp {timestamp}')
 
             # first arg needs to be an iterable
-            dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True, accept_incomplete=True)
+            dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True, accept_incomplete=False)
 
             gb = dots.groupby('trialEnd')
             # write dots to HDF5 file

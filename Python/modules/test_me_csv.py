@@ -11,7 +11,7 @@ Questions:
 import numpy as np
 import pandas as pd
 
-TIMESTAMP = '2020_01_99_14_05' # '2020_01_06_14_05'
+TIMESTAMP = '2020_01_07_14_09'  # for testing: '2020_01_99_14_05'
 
 PROCESSED_FOLDER = '/home/adrian/SingleCP_DotsReversal/Fall2019/processed/'
 ME_CSV_FILENAME = TIMESTAMP + '_motion_energy.csv'
@@ -47,8 +47,8 @@ def diagnose_int_sequence(seq, title=None):
         print("sequence has no aberrations")
         print()
 
-# FIRA
 
+# FIRA
 fira_data = pd.read_csv(RAW_FOLDER + FIRA_FILENAME)
 fira_trial_index = fira_data['trialIndex'].to_numpy(dtype=int)
 
