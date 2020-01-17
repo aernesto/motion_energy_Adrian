@@ -11,7 +11,7 @@ Questions:
 import numpy as np
 import pandas as pd
 
-TIMESTAMP = '2020_01_06_14_05'
+TIMESTAMP = '2020_01_99_14_05' # '2020_01_06_14_05'
 
 PROCESSED_FOLDER = '/home/adrian/SingleCP_DotsReversal/Fall2019/processed/'
 ME_CSV_FILENAME = TIMESTAMP + '_motion_energy.csv'

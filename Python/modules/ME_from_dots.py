@@ -53,7 +53,7 @@ if __name__ == '__main__':
             print(f'Starting the processing of *dotsPositions.csv file with timestamp {timestamp}')
 
             # first arg needs to be an iterable
-            dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True)
+            dots = basic_func.label_dots((timestamp,), DOTS_POSITIONS_FOLDER, return_df=True, accept_incomplete=True)
 
             gb = dots.groupby('trialEnd')
             # write dots to HDF5 file
@@ -74,12 +74,13 @@ if __name__ == '__main__':
         f = h5py.File(h5_filename, 'r+')  # read/write
         d = f[pb_dset_name]
         pdset = f[pb_pdset_name]
-        d = d[1:]  # override first trial
-        pdset = pdset[1:]
-        f.__delitem__(pb_dset_name)
-        f.__delitem__(pb_pdset_name)
-        f[pb_dset_name] = d
-        f[pb_pdset_name] = pdset
+        if pdset[0] == pdset[1]:
+            d = d[1:]  # override first trial
+            pdset = pdset[1:]
+            f.__delitem__(pb_dset_name)
+            f.__delitem__(pb_pdset_name)
+            f[pb_dset_name] = d
+            f[pb_pdset_name] = pdset
         f.close()
 
     # Now, we need to compute motion energy

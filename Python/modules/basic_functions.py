@@ -5,7 +5,7 @@ import os
 import dots_db.dotsDB.dotsDB as ddb
 
 
-def label_dots(timestamps, data_folder, return_df=False, global_labeled_dots_filename=None):
+def label_dots(timestamps, data_folder, return_df=False, global_labeled_dots_filename=None, accept_incomplete=False):
     """
     fetches dots data outputted by MATLAB (the _dotsPositions.csv files) for specified session timestamps, adds
     relevant fira data (join operation) and appends resulting 'labeled_dots' dataframe to the 
@@ -15,6 +15,7 @@ def label_dots(timestamps, data_folder, return_df=False, global_labeled_dots_fil
     :param return_df: (bool) If True, a pandas.DataFrame is returned
     :param global_labeled_dots_filename: string with full path and filename for global .csv file to write to.
                                          If None, no file is written.
+    :param accept_incomplete: (bool) if False, performs rough assert tests to check that FIRA and DOTS match up
     :return: Either a pandas.DataFrame or None. Might also write to file depending on arg.
     """
     list_of_labeled_dots_dataframes = []
@@ -24,12 +25,15 @@ def label_dots(timestamps, data_folder, return_df=False, global_labeled_dots_fil
         dots = pd.read_csv(folder + ts + '_dotsPositions.csv')
         dots = dots[dots['isActive'] == 1]
         del dots['isActive'], dots['taskID'], dots['isCoherent']
-        try:
-            assert fira.index.min() == 0 and fira.index.max() == 819 and len(fira.index) == 820
-            assert dots['trialIx'].min() == 0 and dots['trialIx'].max() == 819
-        except AssertionError:
-            print(f'assert failed with timestamp {ts}')
-            continue
+
+        if not accept_incomplete:
+            try:
+                assert fira.index.min() == 0 and fira.index.max() == 819 and len(fira.index) == 820
+                assert dots['trialIx'].min() == 0 and dots['trialIx'].max() == 819
+            except AssertionError:
+                print(f'assert failed with timestamp {ts}')
+                continue
+
         labeled_dots = dots.join(fira, on="trialIx")
         labeled_dots['trueVD'] = labeled_dots['dotsOff'] - labeled_dots['dotsOn']
         labeled_dots['presenceCP'] = labeled_dots['reversal'] > 0
