@@ -138,17 +138,32 @@ def build_trial_identifier(df):
     """
     Out of a data frame containing info for a single date and trial, builds a 22-char string used as a trial identifier
     :param df: (pandas.DataFrame) must have
-            a 'trialIndex' column with a single value in the whole data frame
+            a 'trialIndex' column with a single value in the whole data frame OR
+                   a 'trialIx' column with a single value, but with the counter starting at 0
             a 'date' column with a single value in the whole data frame
     :return: (str) for trialIndex=3 and date=202001061405, returns '2020_01_06_14_05_00003'
     """
-    trial_index = df['trialIndex'][0]
+    try:
+        trial_index = df['trialIndex'].iloc[0]  # trialIndex starts counting at 1
+    except KeyError:
+        trial_index = df['trialIx'].iloc[0] + 1  # trialIx starts counting at 0
+
     # the following forces the string representing the integer to have at least 5 characters
     # so 3 will yield 00003 and 1000 will yield 01000, but 220001 will yield 220001
     # I need to control for string length to store as fixed-length string in HDF5 format
-    index_string = f"{trial_index:05d}"
+    try:
+        index_string = f"{trial_index:05d}"
+    except TypeError:
+        print('trial_index type:', type(trial_index))
+        print('trial_index:', trial_index)
+        print('')
+        print('df.shape', df.shape)
+        print("type(df['trialIx']:", type(df['trialIx']))
+        print("df['trialIx']:", df['trialIx'])
+        raise
+
     assert len(index_string) == 5, f"trial_index {trial_index} has more than 5 digits"
-    date_str = str(df['date'][0])
+    date_str = str(df['date'].iloc[0])
     date_str = '_'.join([date_str[:4], date_str[4:6], date_str[6:8], date_str[8:10], date_str[10:]])
     assert len(date_str) == 16, f"timestamp {date_str} has more than 16 characters"
     # total length of returned string should be 16 + 1 + 5 = 22
@@ -244,11 +259,16 @@ def write_dots_to_file(df, hdf5_file):
     """
     write the dots info contained in the pandas.DataFrame df to a dotsDB HDF5 file.
 
-    :param df: (pandas.DataFrame) should only contain data about a single trial.
+    :param df: (pandas.DataFrame) should only contain data about a single trial, with either 'trialIndex' or 'trialIx'
+            as column name for trial identifier.
     :param hdf5_file: (str) full path to HDF5 file
     """
-    trial_indices = df['trialIndex'].unique()
-    assert len(trial_indices) == 1, f'more than 1 trialIndex: {trial_indices}'
+    try:
+        trial_indices = df['trialIx'].unique()
+    except KeyError:
+        trial_indices = df['trialIndex'].unique()
+    assert len(trial_indices) == 1, f'more than 1 trialIx: {trial_indices}'
+
     frames, extra_params = get_frames(df)
     gn, params = get_group_name(df)
 
