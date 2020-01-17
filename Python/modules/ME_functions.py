@@ -336,13 +336,7 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
     #  1. initialize dataframes of correct size, with correct row and column names, filled with NaN values
     row_names = list(range(len(dots_energy)))
 
-    col_names = [
-        'timestamp',
-        'coherence',
-        'endDirection',
-        'numberFramesPreCP',
-        'numberFramesPostCP'
-    ]
+    col_names = ['trialID']
 
     assert all(set(col_names) == set(pp.keys()) for pp in list_trials_params), 'list of passed params has wrong keys'
 
@@ -379,7 +373,7 @@ def compute_motion_energy_for_trials_in_db(db_file, dset_name, gp_name, trial_li
         left_df.iloc[trial, time_start_index:time_start_index + num_time_points] = motion_energy
         right_df.iloc[trial, time_start_index:time_start_index + num_time_points] = list(reversed(motion_energy))
         NUM_PROCESSED_TRIALS['1D ME'] += 1
-        print(NUM_PROCESSED_TRIALS)
+        # print(NUM_PROCESSED_TRIALS)
     if append_to is None:
         return left_df, right_df
     else:
@@ -494,15 +488,10 @@ def extract_me_full_database(db_filename, shape_of_filters=(32, 32, 6)):
     with the trial-by-trial motion energy
     :param db_filename: (str) full path to .h5 file
     :param shape_of_filters: (tuple) kwarg that gets passed to :function:create_filters()
-    :return: one pandas.DataFrame objects. First columns are always:
-             * timestamp           (str) e.g. '2020_01_07_11_34'
-             * coherence           (float) coherence (always positive), e.g. 18.4
-             * endDirection        'left' or 'right' -- direction at end of trial
-             * numberFramesPreCP   int
-             * numberFramesPostCP  int   0 if there wasn't any change-points
+    :return: one pandas.DataFrame objects. First column is always:
+             * trialID           (str) e.g. '2020_01_07_11_34_00733'
              The remaining columns have times in seconds as names, like '0.22332'
-             For the left-aligned dataframe (first returned object), these times
-             represent real time points during the trial.
+             These times represent real time points during the trial.
     """
     # inspect database
     object_names, db_info = get_object_names_in_db(db_filename)
@@ -514,7 +503,7 @@ def extract_me_full_database(db_filename, shape_of_filters=(32, 32, 6)):
             objects.append((obj[:-3], obj))  # append tuple (group_name, dataset_name)
 
     # loop through datasets and compute me
-    dset_mes_left, dset_mes_right = [], []
+    dset_mes_left = []
 
     for gname, dname in objects:
         tot_trials = db_info[dname]['shape'][0]

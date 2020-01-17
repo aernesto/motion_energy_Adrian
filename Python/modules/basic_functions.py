@@ -134,50 +134,47 @@ def numeric_switch_direction(init_dir):
     return other_dir
 
 
+def build_trial_identifier(df):
+    """
+    Out of a data frame containing info for a single date and trial, builds a 22-char string used as a trial identifier
+    :param df: (pandas.DataFrame) must have
+            a 'trialIndex' column with a single value in the whole data frame
+            a 'date' column with a single value in the whole data frame
+    :return: (str) for trialIndex=3 and date=202001061405, returns '2020_01_06_14_05_00003'
+    """
+    trial_index = df['trialIndex'][0]
+    # the following forces the string representing the integer to have at least 5 characters
+    # so 3 will yield 00003 and 1000 will yield 01000, but 220001 will yield 220001
+    # I need to control for string length to store as fixed-length string in HDF5 format
+    index_string = f"{trial_index:05d}"
+    assert len(index_string) == 5, f"trial_index {trial_index} has more than 5 digits"
+    date_str = str(df['date'][0])
+    date_str = '_'.join([date_str[:4], date_str[4:6], date_str[6:8], date_str[8:10], date_str[10:]])
+    assert len(date_str) == 16, f"timestamp {date_str} has more than 16 characters"
+    # total length of returned string should be 16 + 1 + 5 = 22
+    return date_str + '_' + index_string
+
+
 def get_frames(df):
     """
     get the dots data as a list of numpy arrays, as dotsDB requires them
     also returns a list of dicts, all having the keys: 'timestamp', 'coherence', 'endDirection', 'numberFramesPreCP',
     'numberFramesPostCP'. Length of the two lists are equal.
 
-    :param df: (pandas.DataFrame)
-    :return: (2-tuple) list of frames and list of parameters
+    :param df: (pandas.DataFrame) data frame containing data about a single trial only
+    :return: (2-tuple) list of frames and trial_identifier (see :function:build_trial_identifier())
     """
+    trial_identifier = build_trial_identifier(df)
+
     # (could/should probably be re-written with groupby and apply...)
     num_frames = np.max(df["frameIdx"]).astype(int)
     assert not np.isnan(num_frames), 'NaN num_frames'
-    list_of_frames, list_of_params = [], []
-
-    # # DEBUG
-    # debug_counter = 1
+    list_of_frames = []
 
     for fr in range(num_frames):
         frame_data = df[df["frameIdx"] == (fr+1)]
         list_of_frames.append(np.array(frame_data[['ypos', 'xpos']]))  # here I swap xpos with ypos for dotsDB
-
-        sub_df = frame_data.iloc[0, :]
-        # # DEBUG
-        # if debug_counter:
-        #     print('---------------frame_data--------------')
-        #     print(type(frame_data))
-        #     print(frame_data.shape)
-        #     print(frame_data)
-        #     print('----------------sub_df-----------------')
-        #     print(type(sub_df))
-        #     print(sub_df.shape)
-        #     print(sub_df)
-        #     debug_counter = 0
-
-        init_direction = sub_df['initDirection']
-        end_direction = numeric_switch_direction(init_direction) if sub_df['presenceCP'] else init_direction
-        list_of_params.append({
-            'timestamp': float(sub_df['date']),
-            'coherence': float(sub_df['coherence']),
-            'endDirection': float(end_direction),
-            'numberFramesPreCP': float(sub_df['numberDrawPreCP']),
-            'numberFramesPostCP': float(sub_df['numberDrawPostCP'])
-        })
-    return list_of_frames, list_of_params
+    return list_of_frames, trial_identifier
 
 
 def get_group_name(df):
@@ -246,11 +243,12 @@ def get_group_name(df):
 def write_dots_to_file(df, hdf5_file):
     """
     write the dots info contained in the pandas.DataFrame df to a dotsDB HDF5 file.
-    df should only contain data about a single trial.
 
-    :param df: (pandas.DataFrame)
+    :param df: (pandas.DataFrame) should only contain data about a single trial.
     :param hdf5_file: (str) full path to HDF5 file
     """
+    trial_indices = df['trialIndex'].unique()
+    assert len(trial_indices) == 1, f'more than 1 trialIndex: {trial_indices}'
     frames, extra_params = get_frames(df)
     gn, params = get_group_name(df)
 
@@ -277,7 +275,7 @@ def write_dots_to_file(df, hdf5_file):
     stimulus = ddb.DotsStimulus(**parameters)
 
     try:
-        ddb.write_stimulus_to_file(stimulus, 1, hdf5_file, extra_params,
+        ddb.write_stimulus_to_file(stimulus, 1, hdf5_file, [extra_params],
                                    pre_generated_stimulus=[frames],
                                    group_name=gn, append_to_group=True, initial_shape=50)
     except TypeError:
