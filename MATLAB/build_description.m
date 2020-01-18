@@ -13,5 +13,5 @@ function desc = build_description(behavior_table, trialIndex)
   else
       rev = 'YES';
   end
-  desc = [coh, '; startDir=', dir, '; hasCP=', rev];
+  desc = [coh, '; endDir=', dir, '; hasCP=', rev];
 end
