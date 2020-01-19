@@ -1,4 +1,5 @@
 % Example script to compute very simple reverse kernels
+%%
 clear
 TIMESTAMP = '2020_01_07_14_09';
 
@@ -29,9 +30,9 @@ times = me_table{1,2:end};
 
 % produce a few plots of motion energy on single trials, just by reading
 % off arbitrary rows of the motion energy table
-for me_row=1:0 %802:807
+for me_row=692:697
     figure(me_row)
-    plot(times, -me_table{me_row,2:end})
+    plot(times, me_table{me_row,2:end})
     trialID = me_table{me_row,1}{1};
     trial_index = get_trialIndex_from_trialID(trialID);
     title(build_description(fira_table, trial_index))
@@ -46,14 +47,15 @@ for me_row=1:0 %802:807
     hold off
 end
 
+%%
 % Compute a kernel by 
 % 1/ fixing nominal stimulus conditions
 % 2/ averaging ME across trials with the same nominal conditions
-nominal_conditions.dirChoice = 'any';  % options = 'right', 'left', 'any'
-nominal_conditions.coherence = 46;
-nominal_conditions.endDir = 'right'; % options = 'right', 'left', 'any'
+nominal_conditions.dirChoice = 'left';  % options = 'right', 'left', 'any'
+nominal_conditions.coherence = 0;
+nominal_conditions.endDir = 'any'; % options = 'right', 'left', 'any'
 nominal_conditions.duration = 0.4;
-nominal_conditions.CP = 'NO';
+nominal_conditions.CP = 'any';
 [kk, num_trials, trialIDs] = compute_kernel(nominal_conditions, fira_table, me_table);
 disp('trial IDs used in kernel')
 trialIDs
@@ -62,4 +64,4 @@ plot(times, kk)
 text(.5,.1,[num2str(num_trials), ' trials'], 'Units', 'normalized');
 title(nominal_conditions2title(nominal_conditions));
 xlabel('time (s)')
-ylabel('ME')
+ylabel('AVG ME')

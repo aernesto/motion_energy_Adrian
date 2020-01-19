@@ -34,8 +34,10 @@ function [kernel, tot_trials, trialID] = compute_kernel(nom_cond, fira, me)
         end
         if strcmp(cond.CP, 'NO')
             new_struct.CP = 0;
-        else
+        elseif strcmp(cond.CP, 'YES')
             new_struct.CP = 0.2;
+        else
+            new_struct.CP = 'any';
         end
     end
 
@@ -52,7 +54,9 @@ end
 if not(ischar(nom_cond.endDir))  % only filter on endDir if not 'any'
     logical_ix = logical_ix & (fira.direction == nom_cond.endDir);
 end
-logical_ix = logical_ix & (fira.reversal == nom_cond.CP);
+if not(ischar(nom_cond.CP))
+    logical_ix = logical_ix & (fira.reversal == nom_cond.CP);
+end
 useful_trials = fira(logical_ix, :);
 
 % step 2 = convert trialIndex to trialID
