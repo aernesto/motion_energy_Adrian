@@ -83,11 +83,25 @@ writetable(U, DOTS, 'WriteRowNames',true)
 disp('dots written')
 end
 
+function dd = flip_direction(d)
+    if d == 180
+        dd = 0; 
+    else
+        dd = 180;
+    end
+end
+
+
 function [params, params2] = extract_dots_params(one_row)
 % get dots stimulus parameter from table's single row
     params = table2struct(one_row);
     params2.numberDrawPreCP = params.numberDrawPreCP;
     params2.numberDrawPostCP = params.numberDrawPostCP;
+    
+    if params.reversal > 0  % there is a CP
+        % set 'direction' to 'initDir' instead of 'endDir'
+        params.direction = flip_direction(params.direction);
+    end
     
     % remove unnecessary fields
     params = rmfield(params, { ...
@@ -143,14 +157,6 @@ function frame_3d_matrix = generate_frames(params_struct, ...
         second_struct.numberDrawPreCP;
 
     dots = dotsDrawableDotKinetogramDebug(params_struct);
-
-    function dd = flip_direction(d)
-        if d == 180
-            dd = 0;
-        else
-            dd = 180;
-        end
-    end
 
     % loop through frame
     i = 1;  % frame count
